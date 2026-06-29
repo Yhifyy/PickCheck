@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PickCheck</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ============ LOGIN ============ -->
+  <div id="login-view">
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-icon">&#128274;</div>
+        <div class="brand-name">PickCheck</div>
+      </div>
+      
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Logga in</button>
+        <button class="auth-tab" data-tab="register">Skapa konto</button>
+      </div>
+      
+      <div id="login-error" class="auth-error hidden"></div>
+      
+      <!-- Login form -->
+      <form id="login-form" class="auth-form" autocomplete="off">
+        <div class="field">
+          <span class="icon">&#128100;</span>
+          <input type="text" id="login-user" placeholder="Användarnamn" />
+        </div>
+        <div class="field">
+          <span class="icon">&#128274;</span>
+          <input type="password" id="login-pass" placeholder="Lösenord" />
+          <span class="toggle" id="pass-toggle">&#128065;</span>
+        </div>
+        <button type="submit" class="btn btn-block">Logga in</button>
+      </form>
+      
+      <!-- Register form -->
+      <form id="register-form" class="auth-form hidden" autocomplete="off">
+        <div class="field">
+          <span class="icon">&#128100;</span>
+          <input type="text" id="reg-user" placeholder="Användarnamn (minst 2 tecken)" />
+        </div>
+        <div class="field">
+          <span class="icon">&#128221;</span>
+          <input type="text" id="reg-display" placeholder="Visningsnamn (valfritt)" />
+        </div>
+        <div class="field">
+          <span class="icon">&#128274;</span>
+          <input type="password" id="reg-pass" placeholder="Lösenord (minst 4 tecken)" />
+        </div>
+        <div class="field">
+          <span class="icon">&#128274;</span>
+          <input type="password" id="reg-pass2" placeholder="Bekräfta lösenord" />
+        </div>
+        <button type="submit" class="btn btn-block">Skapa konto</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ SIDEBAR ============ -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">&#128274;</div>
+      <div class="brand-name">PickCheck</div>
+      <button class="sidebar-close" id="sidebar-close">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/" class="active"><span class="icon">&#127968;</span> Home</a>
+      <a href="/history.html"><span class="icon">&#128269;</span> Historik</a>
+      <a href="/stats.html"><span class="icon">&#128202;</span> Statistik</a>
+      <a href="/admin.html"><span class="icon">&#128736;</span> Admin</a>
+      <a href="#" id="logout-link"><span class="icon">&#128682;</span> Logga ut</a>
+    </nav>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app-view" class="hidden">
+    <div class="topbar">
+      <span class="menu-btn" id="menu-btn">&#9776;</span>
+      <span class="title">PickCheck</span>
+      <span class="spacer"></span>
+      <span class="theme-toggle" id="theme-toggle" title="Växla mörkt/ljust läge">&#127769;</span>
+      <div class="user-menu">
+        <span class="user" id="topbar-user">&#128100; kennart &#9662;</span>
+        <div class="user-dropdown" id="user-dropdown">
+          <a href="#" id="topbar-logout">&#128682; Logga ut</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <div class="main-col">
+        <div class="page-brand">
+          <div class="brand-icon">&#128274;</div>
+          <div class="brand-name">PickCheck</div>
+        </div>
+
+        <!-- Dashboard -->
+        <div id="dashboard" class="dashboard">
+          <div class="dash-cards">
+            <div class="dash-card">
+              <div class="dash-value" id="dash-today-checks">-</div>
+              <div class="dash-label">Kontroller idag</div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-value" id="dash-today-errors">-</div>
+              <div class="dash-label">Fel idag</div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-value" id="dash-week-checks">-</div>
+              <div class="dash-label">Denna vecka</div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-value" id="dash-avg-time">-</div>
+              <div class="dash-label">Snitt kontrolltid</div>
+            </div>
+          </div>
+          <div class="dash-recent">
+            <h4>Senaste kontroller</h4>
+            <div id="dash-recent-list"></div>
+          </div>
+        </div>
+
+        <div class="search-row">
+          <div class="input-group">
+            <label for="sscc-input">SSCC</label>
+            <input type="text" id="sscc-input" placeholder="Skanna eller skriv pallnummer" size="28" />
+          </div>
+          <button class="btn" id="search-btn">Search</button>
+          <button class="btn btn-undo hidden" id="unfinish-btn" title="Ångra senaste Finish Check (F6)">&#8634; Ångra check (F6)</button>
+        </div>
+
+        <div id="pallet-area" class="hidden">
+          <div class="pallet-title">
+            Pallet <span id="pallet-number"></span>
+            <span class="order" id="pallet-order"></span>
+            <span id="pallet-current-badge"></span>
+          </div>
+
+          <div class="progress" id="progress-text"></div>
+
+          <div class="entry-row">
+            <div class="input-group">
+              <label for="scan-input">Skanna produkt (artikelnr)</label>
+              <input type="text" id="scan-input" placeholder="Skanna vara → hoppar till rätt rad" size="32" />
+            </div>
+          </div>
+
+          <div class="filter-bar" id="filter-bar"></div>
+
+          <button class="btn btn-finish" id="finish-btn">FINISH CHECK</button>
+
+          <table id="lines-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Pall</th>
+                <th>Productnumber</th>
+                <th>Product</th>
+                <th>Picker</th>
+                <th>Picked</th>
+                <th>Checked</th>
+                <th>Checktime</th>
+              </tr>
+            </thead>
+            <tbody id="lines-body"></tbody>
+          </table>
+
+          <div class="hint">
+            <strong>Tangentbord:</strong>
+            <kbd>Enter</kbd> i antalsfältet = bekräfta &amp; hoppa till nästa &nbsp;·&nbsp;
+            <kbd>&#8593;</kbd>/<kbd>&#8595;</kbd> byt rad &nbsp;·&nbsp;
+            <kbd>Shift</kbd>+<kbd>Enter</kbd> flagga fel produkt &nbsp;·&nbsp;
+            <kbd>F2</kbd> ny pall (SSCC) &nbsp;·&nbsp;
+            <kbd>F4</kbd> Finish Check &nbsp;·&nbsp;
+            <kbd>F6</kbd> ångra check
+          </div>
+        </div>
+      </div>
+
+      <div class="side-col">
+        <div class="stats-box">
+          <h3>Statistics</h3>
+          <div id="stats-content"></div>
+          <div class="release">Release 1.0</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="banner" class="hidden"></div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // Sidebar toggle
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebar-overlay");
+    const menuBtn = document.getElementById("menu-btn");
+    const closeBtn = document.getElementById("sidebar-close");
+
+    function openSidebar() {
+      sidebar.classList.add("open");
+      overlay.classList.add("open");
+    }
+    function closeSidebar() {
+      sidebar.classList.remove("open");
+      overlay.classList.remove("open");
+    }
+
+    menuBtn.addEventListener("click", openSidebar);
+    closeBtn.addEventListener("click", closeSidebar);
+    overlay.addEventListener("click", closeSidebar);
+    
+    // Logout from sidebar
+    document.getElementById("logout-link").addEventListener("click", (e) => {
+      e.preventDefault();
+      closeSidebar();
+      doLogout();
+    });
+    
+    // User dropdown in topbar
+    const userEl = document.getElementById("topbar-user");
+    const dropdown = document.getElementById("user-dropdown");
+    
+    userEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dropdown.classList.toggle("open");
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener("click", () => {
+      dropdown.classList.remove("open");
+    });
+    
+    // Logout from topbar dropdown
+    document.getElementById("topbar-logout").addEventListener("click", (e) => {
+      e.preventDefault();
+      dropdown.classList.remove("open");
+      doLogout();
+    });
+    
+    // Dark mode toggle
+    const themeToggle = document.getElementById("theme-toggle");
+    function setDarkMode(dark) {
+      document.documentElement.classList.toggle("dark-mode", dark);
+      themeToggle.textContent = dark ? "☀️" : "🌙";
+      localStorage.setItem("pickcheck_dark", dark ? "1" : "0");
+    }
+    
+    themeToggle.addEventListener("click", () => {
+      const isDark = document.documentElement.classList.contains("dark-mode");
+      setDarkMode(!isDark);
+    });
+    
+    // Load saved theme
+    if (localStorage.getItem("pickcheck_dark") === "1") {
+      setDarkMode(true);
+    }
+    
+    // Load dashboard
+    async function loadDashboard() {
+      try {
+        const res = await fetch("/api/dashboard");
+        const data = await res.json();
+        
+        document.getElementById("dash-today-checks").textContent = data.today.checks_today || 0;
+        document.getElementById("dash-today-errors").textContent = data.today.errors_today || 0;
+        document.getElementById("dash-week-checks").textContent = data.week.checks_week || 0;
+        
+        const avgTime = data.today.avg_duration;
+        document.getElementById("dash-avg-time").textContent = avgTime ? Math.round(avgTime) + "s" : "-";
+        
+        // Mark errors card if there are errors
+        if (data.today.errors_today > 0) {
+          document.getElementById("dash-today-errors").parentElement.classList.add("error");
+        }
+        
+        // Recent checks
+        const recentEl = document.getElementById("dash-recent-list");
+        if (data.recent && data.recent.length > 0) {
+          recentEl.innerHTML = data.recent.map(c => {
+            const time = new Date(c.finished_at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+            const statusClass = c.total_errors > 0 ? "error" : "ok";
+            const statusText = c.total_errors > 0 ? c.total_errors + " fel" : "OK";
+            return `
+              <div class="dash-recent-item">
+                <span class="sscc">${c.sscc}</span>
+                <span class="time">${time}</span>
+                <span class="status ${statusClass}">${statusText}</span>
+              </div>
+            `;
+          }).join("");
+        } else {
+          recentEl.innerHTML = '<div style="color: var(--gray); font-size: 13px;">Inga kontroller ännu</div>';
+        }
+      } catch (err) {
+        console.log("Could not load dashboard");
+      }
+    }
+    
+    loadDashboard();
+  </script>
+</body>
+</html>

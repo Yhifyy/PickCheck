@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PickCheck - Statistik</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .stats-page { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .stats-header { display: flex; align-items: center; gap: 20px; margin-bottom: 30px; }
+    .stats-header h1 { margin: 0; font-size: 28px; }
+    .back-link { color: var(--blue); text-decoration: none; font-size: 14px; }
+    .back-link:hover { text-decoration: underline; }
+    
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 30px; }
+    .card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 20px; }
+    .card-value { font-size: 36px; font-weight: 700; color: var(--blue); }
+    .card-label { font-size: 14px; color: var(--gray); margin-top: 4px; }
+    .card.error .card-value { color: var(--red); }
+    .card.success .card-value { color: var(--green); }
+    
+    .section { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+    .section h2 { margin: 0 0 16px; font-size: 18px; border-bottom: 2px solid var(--border); padding-bottom: 8px; }
+    
+    .data-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .data-table th { text-align: left; padding: 10px 8px; background: var(--gray-light); border-bottom: 2px solid var(--border); font-weight: 600; }
+    .data-table td { padding: 10px 8px; border-bottom: 1px solid var(--gray-light); }
+    .data-table tr:hover td { background: var(--blue-light); }
+    .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .data-table .error-cell { color: var(--red); font-weight: 600; }
+    
+    .filter-row { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+    .filter-row label { font-size: 14px; color: var(--gray); }
+    .filter-row select, .filter-row input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; }
+    
+    .export-btn { background: var(--green); color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+    .export-btn:hover { background: #0b5a0b; }
+    
+    .loading { text-align: center; padding: 40px; color: var(--gray); }
+    .no-data { text-align: center; padding: 20px; color: var(--gray); font-style: italic; }
+  </style>
+</head>
+<body>
+  <!-- ============ SIDEBAR ============ -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">&#128274;</div>
+      <div class="brand-name">PickCheck</div>
+      <button class="sidebar-close" id="sidebar-close">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/"><span class="icon">&#127968;</span> Home</a>
+      <a href="/history.html"><span class="icon">&#128269;</span> Historik</a>
+      <a href="/stats.html" class="active"><span class="icon">&#128202;</span> Statistik</a>
+      <a href="/admin.html"><span class="icon">&#128736;</span> Admin</a>
+      <a href="#" id="logout-link"><span class="icon">&#128682;</span> Logga ut</a>
+    </nav>
+  </div>
+
+  <div class="topbar">
+    <span class="menu-btn" id="menu-btn">&#9776;</span>
+    <span class="title">PickCheck - Statistik</span>
+    <span class="spacer"></span>
+    <span class="theme-toggle" id="theme-toggle" title="Växla mörkt/ljust läge">&#127769;</span>
+  </div>
+
+  <div class="stats-page">
+    <div class="stats-header">
+      <div class="brand-icon">&#128202;</div>
+      <div>
+        <h1>Statistik</h1>
+        <p style="margin: 4px 0 0; color: var(--gray);">Översikt över kontroller och avvikelser</p>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <label>Visa senaste:</label>
+      <select id="days-filter">
+        <option value="7">7 dagar</option>
+        <option value="30" selected>30 dagar</option>
+        <option value="90">90 dagar</option>
+        <option value="365">1 år</option>
+      </select>
+      <button class="export-btn" id="export-btn">&#128190; Exportera CSV</button>
+    </div>
+
+    <div id="content">
+      <div class="loading">Laddar statistik...</div>
+    </div>
+  </div>
+
+  <script>
+    const API = "/api";
+    let currentDays = 30;
+
+    async function loadStats() {
+      const content = document.getElementById("content");
+      content.innerHTML = '<div class="loading">Laddar statistik...</div>';
+
+      try {
+        const res = await fetch(`${API}/statistics?days=${currentDays}`);
+        const data = await res.json();
+        renderStats(data);
+      } catch (err) {
+        content.innerHTML = '<div class="loading" style="color: var(--red);">Kunde inte ladda statistik</div>';
+      }
+    }
+
+    function renderStats(data) {
+      const t = data.totals || {};
+      const totalErrors = (t.total_wrong_amount || 0) + (t.total_wrong_product || 0) + 
+                          (t.total_wrong_pallet || 0) + (t.total_extra || 0);
+      const avgDuration = t.avg_duration ? formatDuration(t.avg_duration) : "-";
+
+      let html = `
+        <div class="cards">
+          <div class="card">
+            <div class="card-value">${t.total_checks || 0}</div>
+            <div class="card-label">Kontroller totalt</div>
+          </div>
+          <div class="card ${totalErrors > 0 ? 'error' : 'success'}">
+            <div class="card-value">${totalErrors}</div>
+            <div class="card-label">Avvikelser totalt</div>
+          </div>
+          <div class="card">
+            <div class="card-value">${avgDuration}</div>
+            <div class="card-label">Snitt kontrolltid</div>
+          </div>
+          <div class="card ${(t.total_wrong_pallet || 0) > 0 ? 'error' : ''}">
+            <div class="card-value">${t.total_wrong_pallet || 0}</div>
+            <div class="card-label">Fel pall</div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Per vecka</h2>
+          ${renderWeekTable(data.perWeek || [])}
+        </div>
+
+        <div class="section">
+          <h2>Per plockare (mest fel först)</h2>
+          ${renderPickerTable(data.perPicker || [])}
+        </div>
+
+        <div class="section">
+          <h2>Produkter med mest fel</h2>
+          ${renderProductTable(data.productsWithErrors || [])}
+        </div>
+      `;
+      document.getElementById("content").innerHTML = html;
+    }
+
+    function renderWeekTable(weeks) {
+      if (!weeks.length) return '<div class="no-data">Ingen data för vald period</div>';
+      return `
+        <table class="data-table">
+          <thead><tr><th>Vecka</th><th class="num">Kontroller</th><th class="num">Avvikelser</th></tr></thead>
+          <tbody>
+            ${weeks.map(w => `
+              <tr>
+                <td>${w.week}</td>
+                <td class="num">${w.checks}</td>
+                <td class="num ${w.errors > 0 ? 'error-cell' : ''}">${w.errors}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderPickerTable(pickers) {
+      if (!pickers.length) return '<div class="no-data">Ingen data för vald period</div>';
+      return `
+        <table class="data-table">
+          <thead><tr>
+            <th>Plockare</th>
+            <th class="num">Rader</th>
+            <th class="num">Fel antal</th>
+            <th class="num">Fel produkt</th>
+            <th class="num">Fel pall</th>
+            <th class="num">Totalt fel</th>
+          </tr></thead>
+          <tbody>
+            ${pickers.map(p => {
+              const total = (p.wrong_amount || 0) + (p.wrong_product || 0) + (p.wrong_pallet || 0);
+              return `
+                <tr>
+                  <td><strong>${p.picker || "(okänd)"}</strong></td>
+                  <td class="num">${p.total_lines}</td>
+                  <td class="num ${p.wrong_amount > 0 ? 'error-cell' : ''}">${p.wrong_amount || 0}</td>
+                  <td class="num ${p.wrong_product > 0 ? 'error-cell' : ''}">${p.wrong_product || 0}</td>
+                  <td class="num ${p.wrong_pallet > 0 ? 'error-cell' : ''}">${p.wrong_pallet || 0}</td>
+                  <td class="num ${total > 0 ? 'error-cell' : ''}">${total}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderProductTable(products) {
+      if (!products.length) return '<div class="no-data">Inga produkter med fel under vald period</div>';
+      return `
+        <table class="data-table">
+          <thead><tr>
+            <th>Artikelnr</th>
+            <th>Produkt</th>
+            <th class="num">Kontroller</th>
+            <th class="num">Fel antal</th>
+            <th class="num">Fel produkt</th>
+          </tr></thead>
+          <tbody>
+            ${products.map(p => `
+              <tr>
+                <td><strong>${p.product_number}</strong></td>
+                <td>${p.product_name || ""}</td>
+                <td class="num">${p.total_checks}</td>
+                <td class="num ${p.wrong_amount > 0 ? 'error-cell' : ''}">${p.wrong_amount || 0}</td>
+                <td class="num ${p.wrong_product > 0 ? 'error-cell' : ''}">${p.wrong_product || 0}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function formatDuration(seconds) {
+      if (seconds < 60) return Math.round(seconds) + "s";
+      const m = Math.floor(seconds / 60);
+      const s = Math.round(seconds % 60);
+      return m + "m " + s + "s";
+    }
+
+    document.getElementById("days-filter").addEventListener("change", (e) => {
+      currentDays = parseInt(e.target.value, 10);
+      loadStats();
+    });
+
+    document.getElementById("export-btn").addEventListener("click", () => {
+      window.location.href = `${API}/export/checks?days=${currentDays}`;
+    });
+
+    loadStats();
+
+    // Sidebar toggle
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebar-overlay");
+    const menuBtn = document.getElementById("menu-btn");
+    const closeBtn = document.getElementById("sidebar-close");
+
+    function openSidebar() {
+      sidebar.classList.add("open");
+      overlay.classList.add("open");
+    }
+    function closeSidebar() {
+      sidebar.classList.remove("open");
+      overlay.classList.remove("open");
+    }
+
+    menuBtn.addEventListener("click", openSidebar);
+    closeBtn.addEventListener("click", closeSidebar);
+    overlay.addEventListener("click", closeSidebar);
+    
+    // Logout
+    document.getElementById("logout-link").addEventListener("click", (e) => {
+      e.preventDefault();
+      localStorage.removeItem("pickcheck_user");
+      window.location.href = "/";
+    });
+    
+    // Dark mode
+    const themeToggle = document.getElementById("theme-toggle");
+    function setDarkMode(dark) {
+      document.documentElement.classList.toggle("dark-mode", dark);
+      themeToggle.textContent = dark ? "☀️" : "🌙";
+      localStorage.setItem("pickcheck_dark", dark ? "1" : "0");
+    }
+    themeToggle.addEventListener("click", () => {
+      setDarkMode(!document.documentElement.classList.contains("dark-mode"));
+    });
+    if (localStorage.getItem("pickcheck_dark") === "1") setDarkMode(true);
+  </script>
+</body>
+</html>

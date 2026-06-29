@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PickCheck - Historik</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .history-page { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .history-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+    .history-header h1 { margin: 0; font-size: 28px; }
+    
+    .search-box { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 20px; }
+    .search-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+    .search-group { flex: 1; min-width: 150px; }
+    .search-group label { display: block; font-size: 13px; color: var(--gray); margin-bottom: 4px; }
+    .search-group input, .search-group select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; }
+    .search-group input:focus { outline: none; border-color: var(--blue); }
+    
+    .results-box { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 20px; }
+    .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .results-header h2 { margin: 0; font-size: 18px; }
+    .results-count { color: var(--gray); font-size: 14px; }
+    
+    .results-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .results-table th { text-align: left; padding: 12px 10px; background: var(--gray-light); border-bottom: 2px solid var(--border); font-weight: 600; }
+    .results-table td { padding: 12px 10px; border-bottom: 1px solid var(--gray-light); }
+    .results-table tr:hover td { background: var(--blue-light); cursor: pointer; }
+    .results-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .results-table .status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+    .results-table .status.ok { background: var(--green-light); color: var(--green); }
+    .results-table .status.error { background: var(--red-light); color: var(--red); }
+    
+    .no-results { text-align: center; padding: 40px; color: var(--gray); }
+    .loading { text-align: center; padding: 40px; color: var(--gray); }
+    
+    .detail-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 300; }
+    .detail-modal.hidden { display: none; }
+    .detail-content { background: #fff; border-radius: 8px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .detail-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .detail-header h3 { margin: 0; }
+    .detail-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--gray); }
+    .detail-body { padding: 20px; }
+    .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .detail-item label { display: block; font-size: 12px; color: var(--gray); margin-bottom: 2px; }
+    .detail-item value { font-size: 16px; font-weight: 600; }
+    .detail-lines { margin-top: 16px; }
+    .detail-lines h4 { margin: 0 0 12px; font-size: 14px; }
+    .detail-lines table { width: 100%; font-size: 13px; }
+    .detail-lines th, .detail-lines td { padding: 8px; text-align: left; border-bottom: 1px solid var(--gray-light); }
+  </style>
+</head>
+<body>
+  <!-- ============ SIDEBAR ============ -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">&#128274;</div>
+      <div class="brand-name">PickCheck</div>
+      <button class="sidebar-close" id="sidebar-close">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/"><span class="icon">&#127968;</span> Home</a>
+      <a href="/history.html" class="active"><span class="icon">&#128269;</span> Historik</a>
+      <a href="/stats.html"><span class="icon">&#128202;</span> Statistik</a>
+      <a href="/admin.html"><span class="icon">&#128736;</span> Admin</a>
+      <a href="#" id="logout-link"><span class="icon">&#128682;</span> Logga ut</a>
+    </nav>
+  </div>
+
+  <div class="topbar">
+    <span class="menu-btn" id="menu-btn">&#9776;</span>
+    <span class="title">PickCheck - Historik</span>
+    <span class="spacer"></span>
+    <span class="theme-toggle" id="theme-toggle" title="Växla mörkt/ljust läge">&#127769;</span>
+  </div>
+
+  <div class="history-page">
+    <div class="history-header">
+      <div class="brand-icon">&#128269;</div>
+      <div>
+        <h1>Sök historik</h1>
+        <p style="margin: 4px 0 0; color: var(--gray);">Sök bland tidigare kontroller</p>
+      </div>
+    </div>
+
+    <div class="search-box">
+      <div class="search-row">
+        <div class="search-group">
+          <label>SSCC / Pallnummer</label>
+          <input type="text" id="search-sscc" placeholder="Sök på SSCC..." />
+        </div>
+        <div class="search-group">
+          <label>Plockare</label>
+          <input type="text" id="search-picker" placeholder="Plockare..." />
+        </div>
+        <div class="search-group">
+          <label>Kontrollant</label>
+          <input type="text" id="search-checker" placeholder="Kontrollant..." />
+        </div>
+        <div class="search-group">
+          <label>Datum från</label>
+          <input type="date" id="search-from" />
+        </div>
+        <div class="search-group">
+          <label>Datum till</label>
+          <input type="date" id="search-to" />
+        </div>
+        <div class="search-group">
+          <label>Status</label>
+          <select id="search-status">
+            <option value="">Alla</option>
+            <option value="ok">Utan fel</option>
+            <option value="error">Med fel</option>
+          </select>
+        </div>
+        <button class="btn" id="search-btn">Sök</button>
+      </div>
+    </div>
+
+    <div class="results-box">
+      <div class="results-header">
+        <h2>Resultat</h2>
+        <span class="results-count" id="results-count"></span>
+      </div>
+      <div id="results-body">
+        <p class="no-results">Ange sökkriterier och klicka Sök</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail modal -->
+  <div class="detail-modal hidden" id="detail-modal">
+    <div class="detail-content">
+      <div class="detail-header">
+        <h3>Kontrolldetaljer</h3>
+        <button class="detail-close" id="detail-close">&times;</button>
+      </div>
+      <div class="detail-body" id="detail-body"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = "/api";
+
+    async function search() {
+      const sscc = document.getElementById("search-sscc").value.trim();
+      const picker = document.getElementById("search-picker").value.trim();
+      const checker = document.getElementById("search-checker").value.trim();
+      const from = document.getElementById("search-from").value;
+      const to = document.getElementById("search-to").value;
+      const status = document.getElementById("search-status").value;
+
+      const params = new URLSearchParams();
+      if (sscc) params.append("sscc", sscc);
+      if (picker) params.append("picker", picker);
+      if (checker) params.append("checker", checker);
+      if (from) params.append("from", from);
+      if (to) params.append("to", to);
+      if (status) params.append("status", status);
+      params.append("limit", "100");
+
+      document.getElementById("results-body").innerHTML = '<p class="loading">Söker...</p>';
+
+      try {
+        const res = await fetch(`${API}/check/search?${params}`);
+        const data = await res.json();
+        renderResults(data);
+      } catch (err) {
+        document.getElementById("results-body").innerHTML = '<p class="no-results">Kunde inte söka</p>';
+      }
+    }
+
+    function renderResults(checks) {
+      const container = document.getElementById("results-body");
+      const countEl = document.getElementById("results-count");
+
+      if (!checks || checks.length === 0) {
+        container.innerHTML = '<p class="no-results">Inga kontroller hittades</p>';
+        countEl.textContent = "0 träffar";
+        return;
+      }
+
+      countEl.textContent = `${checks.length} träffar`;
+
+      container.innerHTML = `
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>SSCC</th>
+              <th>Kontrollant</th>
+              <th class="num">Rader</th>
+              <th class="num">Fel</th>
+              <th>Status</th>
+              <th class="num">Tid</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${checks.map(c => {
+              const totalErrors = (c.wrong_amount_count || 0) + (c.wrong_product_count || 0) + (c.wrong_pallet_count || 0) + (c.extra_count || 0);
+              const statusClass = totalErrors > 0 ? 'error' : 'ok';
+              const statusText = totalErrors > 0 ? `${totalErrors} fel` : 'OK';
+              const date = new Date(c.finished_at).toLocaleString('sv-SE');
+              const duration = c.duration_seconds ? `${Math.round(c.duration_seconds)}s` : '-';
+              return `
+                <tr onclick="showDetail(${c.id})">
+                  <td>${date}</td>
+                  <td><strong>${c.sscc}</strong></td>
+                  <td>${c.checked_by || '-'}</td>
+                  <td class="num">${c.checked_lines}/${c.total_lines}</td>
+                  <td class="num">${totalErrors}</td>
+                  <td><span class="status ${statusClass}">${statusText}</span></td>
+                  <td class="num">${duration}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    async function showDetail(checkId) {
+      const modal = document.getElementById("detail-modal");
+      const body = document.getElementById("detail-body");
+      
+      modal.classList.remove("hidden");
+      body.innerHTML = '<p class="loading">Laddar...</p>';
+
+      try {
+        const res = await fetch(`${API}/check/${checkId}`);
+        const data = await res.json();
+        renderDetail(data);
+      } catch (err) {
+        body.innerHTML = '<p>Kunde inte ladda detaljer</p>';
+      }
+    }
+
+    function renderDetail(data) {
+      const log = data.log;
+      const lines = data.lines || [];
+      const extras = data.extras || [];
+
+      const date = new Date(log.finished_at).toLocaleString('sv-SE');
+      const duration = log.duration_seconds ? `${Math.round(log.duration_seconds)} sekunder` : '-';
+
+      document.getElementById("detail-body").innerHTML = `
+        <div class="detail-grid">
+          <div class="detail-item">
+            <label>SSCC</label>
+            <value>${log.sscc}</value>
+          </div>
+          <div class="detail-item">
+            <label>Kontrollant</label>
+            <value>${log.checked_by || '-'}</value>
+          </div>
+          <div class="detail-item">
+            <label>Datum</label>
+            <value>${date}</value>
+          </div>
+          <div class="detail-item">
+            <label>Kontrolltid</label>
+            <value>${duration}</value>
+          </div>
+          <div class="detail-item">
+            <label>Rader</label>
+            <value>${log.checked_lines} / ${log.total_lines}</value>
+          </div>
+          <div class="detail-item">
+            <label>Fel antal</label>
+            <value style="color: ${log.wrong_amount_count ? 'var(--red)' : 'inherit'}">${log.wrong_amount_count || 0}</value>
+          </div>
+          <div class="detail-item">
+            <label>Fel produkt</label>
+            <value style="color: ${log.wrong_product_count ? 'var(--red)' : 'inherit'}">${log.wrong_product_count || 0}</value>
+          </div>
+          <div class="detail-item">
+            <label>Fel pall</label>
+            <value style="color: ${log.wrong_pallet_count ? 'var(--red)' : 'inherit'}">${log.wrong_pallet_count || 0}</value>
+          </div>
+        </div>
+
+        ${lines.length > 0 ? `
+          <div class="detail-lines">
+            <h4>Kontrollerade rader</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Produkt</th>
+                  <th>Plockare</th>
+                  <th>Plockat</th>
+                  <th>Kontrollerat</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${lines.map(l => {
+                  let status = 'OK';
+                  let color = 'var(--green)';
+                  if (l.wrong_product) { status = 'Fel produkt'; color = 'var(--red)'; }
+                  else if (l.checked_qty !== l.picked_qty) { status = `Diff: ${l.checked_qty - l.picked_qty}`; color = 'var(--red)'; }
+                  else if (l.pallet_letter !== l.correct_pallet) { status = 'Fel pall'; color = 'var(--amber)'; }
+                  return `
+                    <tr>
+                      <td>${l.product_number} - ${l.product_name || ''}</td>
+                      <td>${l.picker || '-'}</td>
+                      <td>${l.picked_qty}</td>
+                      <td>${l.checked_qty}</td>
+                      <td style="color: ${color}">${status}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+
+        ${extras.length > 0 ? `
+          <div class="detail-lines">
+            <h4>Extra skannade produkter</h4>
+            <table>
+              <thead>
+                <tr><th>Artikelnummer</th><th>Antal</th></tr>
+              </thead>
+              <tbody>
+                ${extras.map(e => `<tr><td>${e.product_number}</td><td>${e.quantity}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    // Event listeners
+    document.getElementById("search-btn").addEventListener("click", search);
+    document.getElementById("detail-close").addEventListener("click", () => {
+      document.getElementById("detail-modal").classList.add("hidden");
+    });
+    document.getElementById("detail-modal").addEventListener("click", (e) => {
+      if (e.target.id === "detail-modal") {
+        document.getElementById("detail-modal").classList.add("hidden");
+      }
+    });
+
+    // Enter to search
+    document.querySelectorAll(".search-box input").forEach(input => {
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") search();
+      });
+    });
+
+    // Sidebar
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebar-overlay");
+    const menuBtn = document.getElementById("menu-btn");
+    const closeBtn = document.getElementById("sidebar-close");
+
+    menuBtn.addEventListener("click", () => { sidebar.classList.add("open"); overlay.classList.add("open"); });
+    closeBtn.addEventListener("click", () => { sidebar.classList.remove("open"); overlay.classList.remove("open"); });
+    overlay.addEventListener("click", () => { sidebar.classList.remove("open"); overlay.classList.remove("open"); });
+
+    document.getElementById("logout-link").addEventListener("click", (e) => {
+      e.preventDefault();
+      localStorage.removeItem("pickcheck_user");
+      window.location.href = "/";
+    });
+
+    // Dark mode
+    const themeToggle = document.getElementById("theme-toggle");
+    function setDarkMode(dark) {
+      document.documentElement.classList.toggle("dark-mode", dark);
+      themeToggle.textContent = dark ? "☀️" : "🌙";
+      localStorage.setItem("pickcheck_dark", dark ? "1" : "0");
+    }
+    themeToggle.addEventListener("click", () => {
+      setDarkMode(!document.documentElement.classList.contains("dark-mode"));
+    });
+    if (localStorage.getItem("pickcheck_dark") === "1") setDarkMode(true);
+  </script>
+</body>
+</html>

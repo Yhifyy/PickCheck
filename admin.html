@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PickCheck - Admin</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .admin-page { max-width: 900px; margin: 0 auto; padding: 20px; }
+    .admin-header { display: flex; align-items: center; gap: 16px; margin-bottom: 30px; }
+    .admin-header h1 { margin: 0; font-size: 28px; }
+    
+    .admin-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 24px; margin-bottom: 20px; }
+    .admin-card h2 { margin: 0 0 20px; font-size: 18px; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+    
+    .user-list { list-style: none; padding: 0; margin: 0; }
+    .user-item { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--gray-light); gap: 16px; }
+    .user-item:last-child { border-bottom: none; }
+    .user-avatar { width: 40px; height: 40px; background: var(--blue-light); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .user-info { flex: 1; }
+    .user-name { font-weight: 600; }
+    .user-username { font-size: 13px; color: var(--gray); }
+    .user-role { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--gray-light); }
+    .user-role.admin { background: var(--blue-light); color: var(--blue); }
+    .user-actions { display: flex; gap: 8px; }
+    
+    .btn-small { padding: 6px 12px; font-size: 13px; }
+    .btn-danger { background: var(--red); }
+    .btn-danger:hover { background: #b02a2d; }
+    .btn-secondary { background: var(--gray); }
+    .btn-secondary:hover { background: #4a4847; }
+    
+    .form-row { display: flex; gap: 12px; margin-bottom: 16px; align-items: flex-end; }
+    .form-group { flex: 1; }
+    .form-group label { display: block; font-size: 13px; color: var(--gray); margin-bottom: 4px; }
+    .form-group input, .form-group select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; }
+    
+    .message { padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; }
+    .message.success { background: var(--green-light); color: var(--green); }
+    .message.error { background: var(--red-light); color: var(--red); }
+    
+    .no-users { text-align: center; padding: 40px; color: var(--gray); }
+  </style>
+</head>
+<body>
+  <!-- ============ SIDEBAR ============ -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand-icon">&#128274;</div>
+      <div class="brand-name">PickCheck</div>
+      <button class="sidebar-close" id="sidebar-close">&times;</button>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/"><span class="icon">&#127968;</span> Home</a>
+      <a href="/history.html"><span class="icon">&#128269;</span> Historik</a>
+      <a href="/stats.html"><span class="icon">&#128202;</span> Statistik</a>
+      <a href="/admin.html" class="active"><span class="icon">&#128736;</span> Admin</a>
+      <a href="#" id="logout-link"><span class="icon">&#128682;</span> Logga ut</a>
+    </nav>
+  </div>
+
+  <div class="topbar">
+    <span class="menu-btn" id="menu-btn">&#9776;</span>
+    <span class="title">PickCheck - Admin</span>
+    <span class="spacer"></span>
+    <span class="theme-toggle" id="theme-toggle" title="Växla mörkt/ljust läge">&#127769;</span>
+  </div>
+
+  <div class="admin-page">
+    <div class="admin-header">
+      <div class="brand-icon">&#128736;</div>
+      <div>
+        <h1>Användarhantering</h1>
+        <p style="margin: 4px 0 0; color: var(--gray);">Hantera användare och återställ lösenord</p>
+      </div>
+    </div>
+
+    <div id="message" class="message hidden"></div>
+
+    <!-- Reset password -->
+    <div class="admin-card">
+      <h2>&#128273; Återställ lösenord</h2>
+      <form id="reset-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Välj användare</label>
+            <select id="reset-user">
+              <option value="">-- Välj användare --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Nytt lösenord</label>
+            <input type="text" id="reset-password" placeholder="Minst 4 tecken" />
+          </div>
+          <button type="submit" class="btn btn-small">Återställ</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- User list -->
+    <div class="admin-card">
+      <h2>&#128101; Alla användare</h2>
+      <ul class="user-list" id="user-list">
+        <li class="no-users">Laddar...</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const API = "/api";
+    let users = [];
+
+    async function loadUsers() {
+      try {
+        const res = await fetch(`${API}/users`);
+        users = await res.json();
+        renderUsers();
+        renderUserSelect();
+      } catch (err) {
+        showMessage("Kunde inte ladda användare", "error");
+      }
+    }
+
+    function renderUsers() {
+      const list = document.getElementById("user-list");
+      
+      if (users.length === 0) {
+        list.innerHTML = '<li class="no-users">Inga användare hittades</li>';
+        return;
+      }
+      
+      list.innerHTML = users.map(u => `
+        <li class="user-item">
+          <div class="user-avatar">&#128100;</div>
+          <div class="user-info">
+            <div class="user-name">${u.display_name || u.username}</div>
+            <div class="user-username">@${u.username}</div>
+          </div>
+          <span class="user-role ${u.role === 'admin' ? 'admin' : ''}">${u.role}</span>
+          <div class="user-actions">
+            <button class="btn btn-small btn-secondary" onclick="toggleRole('${u.username}', '${u.role}')">
+              ${u.role === 'admin' ? 'Gör till user' : 'Gör till admin'}
+            </button>
+          </div>
+        </li>
+      `).join("");
+    }
+
+    function renderUserSelect() {
+      const select = document.getElementById("reset-user");
+      select.innerHTML = '<option value="">-- Välj användare --</option>' +
+        users.map(u => `<option value="${u.username}">${u.display_name || u.username} (@${u.username})</option>`).join("");
+    }
+
+    function showMessage(text, type) {
+      const el = document.getElementById("message");
+      el.textContent = text;
+      el.className = `message ${type}`;
+      setTimeout(() => el.classList.add("hidden"), 4000);
+    }
+
+    document.getElementById("reset-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      
+      const username = document.getElementById("reset-user").value;
+      const newPassword = document.getElementById("reset-password").value;
+      
+      if (!username) {
+        showMessage("Välj en användare", "error");
+        return;
+      }
+      if (!newPassword || newPassword.length < 4) {
+        showMessage("Lösenord måste vara minst 4 tecken", "error");
+        return;
+      }
+      
+      try {
+        const res = await fetch(`${API}/admin/reset-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, newPassword })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          showMessage(`Lösenord återställt för ${username}. Nytt lösenord: ${newPassword}`, "success");
+          document.getElementById("reset-password").value = "";
+        } else {
+          showMessage(data.error || "Något gick fel", "error");
+        }
+      } catch (err) {
+        showMessage("Kunde inte ansluta till servern", "error");
+      }
+    });
+
+    async function toggleRole(username, currentRole) {
+      const newRole = currentRole === "admin" ? "user" : "admin";
+      
+      try {
+        const res = await fetch(`${API}/admin/set-role`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, role: newRole })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          showMessage(`${username} är nu ${newRole}`, "success");
+          loadUsers();
+        } else {
+          showMessage(data.error || "Något gick fel", "error");
+        }
+      } catch (err) {
+        showMessage("Kunde inte ansluta till servern", "error");
+      }
+    }
+
+    // Sidebar toggle
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebar-overlay");
+    const menuBtn = document.getElementById("menu-btn");
+    const closeBtn = document.getElementById("sidebar-close");
+
+    function openSidebar() { sidebar.classList.add("open"); overlay.classList.add("open"); }
+    function closeSidebar() { sidebar.classList.remove("open"); overlay.classList.remove("open"); }
+
+    menuBtn.addEventListener("click", openSidebar);
+    closeBtn.addEventListener("click", closeSidebar);
+    overlay.addEventListener("click", closeSidebar);
+
+    document.getElementById("logout-link").addEventListener("click", (e) => {
+      e.preventDefault();
+      localStorage.removeItem("pickcheck_user");
+      window.location.href = "/";
+    });
+
+    // Dark mode
+    const themeToggle = document.getElementById("theme-toggle");
+    function setDarkMode(dark) {
+      document.documentElement.classList.toggle("dark-mode", dark);
+      themeToggle.textContent = dark ? "☀️" : "🌙";
+      localStorage.setItem("pickcheck_dark", dark ? "1" : "0");
+    }
+    themeToggle.addEventListener("click", () => {
+      setDarkMode(!document.documentElement.classList.contains("dark-mode"));
+    });
+    if (localStorage.getItem("pickcheck_dark") === "1") setDarkMode(true);
+
+    // Load on start
+    loadUsers();
+  </script>
+</body>
+</html>
