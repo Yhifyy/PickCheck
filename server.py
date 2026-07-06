@@ -7,7 +7,7 @@ API finns på http://localhost:5000/api/...
 Frontend serveras på http://localhost:5000/
 """
 import os
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from flask_cors import CORS
 import database as db
 
@@ -143,6 +143,7 @@ def search_checks():
 
     c.execute(query, params)
     results = [dict(r) for r in c.fetchall()]
+    db.attach_pickers_to_checks(results, picker_filter=picker)
     conn.close()
 
     return jsonify(results)
@@ -187,49 +188,8 @@ def get_statistics():
 
 @app.route("/api/dashboard", methods=["GET"])
 def get_dashboard():
-    """Hämta dashboard-data för idag."""
-    conn = db.get_connection()
-    c = conn.cursor()
-
-    # Dagens statistik
-    c.execute("""
-        SELECT 
-            COUNT(*) as checks_today,
-            SUM(checked_lines) as lines_today,
-            SUM(wrong_amount_count + wrong_product_count + wrong_pallet_count) as errors_today,
-            AVG(duration_seconds) as avg_duration
-        FROM check_logs 
-        WHERE date(finished_at) = date('now')
-    """)
-    today = dict(c.fetchone())
-
-    # Senaste 5 kontrollerna
-    c.execute("""
-        SELECT id, sscc, checked_by, finished_at, total_lines, checked_lines,
-               (wrong_amount_count + wrong_product_count + wrong_pallet_count + extra_count) as total_errors
-        FROM check_logs 
-        ORDER BY finished_at DESC 
-        LIMIT 5
-    """)
-    recent = [dict(r) for r in c.fetchall()]
-
-    # Denna veckas totaler
-    c.execute("""
-        SELECT 
-            COUNT(*) as checks_week,
-            SUM(wrong_amount_count + wrong_product_count + wrong_pallet_count) as errors_week
-        FROM check_logs 
-        WHERE finished_at >= datetime('now', '-7 days')
-    """)
-    week = dict(c.fetchone())
-
-    conn.close()
-
-    return jsonify({
-        "today": today,
-        "recent": recent,
-        "week": week
-    })
+    """Hämta dashboard-data (idag + denna kalendervecka)."""
+    return jsonify(db.get_dashboard_data())
 
 
 @app.route("/api/statistics/picker/<picker>", methods=["GET"])
@@ -280,6 +240,105 @@ def get_picker_stats(picker):
 
 # ============ API: Export ============
 
+@app.route("/api/statistics/pickers-ranking", methods=["GET"])
+def get_pickers_ranking():
+    """Hämta plockare-ranking sorterad efter felfrekvens."""
+    days = request.args.get("days", 30, type=int)
+    conn = db.get_connection()
+    c = conn.cursor()
+
+    # Hämta alla plockare med deras statistik
+    c.execute("""
+        SELECT 
+            r.picker,
+            COUNT(*) as total_lines,
+            SUM(CASE WHEN r.checked_qty IS NOT NULL THEN 1 ELSE 0 END) as checked_lines,
+            SUM(CASE WHEN r.checked_qty != r.picked_qty AND r.wrong_product = 0 THEN 1 ELSE 0 END) as wrong_amount,
+            SUM(r.wrong_product) as wrong_product,
+            SUM(CASE WHEN r.pallet_letter != r.correct_pallet AND r.correct_pallet IS NOT NULL THEN 1 ELSE 0 END) as wrong_pallet,
+            COUNT(DISTINCT l.id) as total_checks,
+            COUNT(DISTINCT l.sscc) as unique_pallets
+        FROM check_line_results r
+        JOIN check_logs l ON r.check_log_id = l.id
+        WHERE l.finished_at >= datetime('now', ?)
+        AND r.picker IS NOT NULL AND r.picker != ''
+        GROUP BY r.picker
+        ORDER BY (wrong_amount + wrong_product + wrong_pallet) DESC
+    """, (f"-{days} days",))
+    
+    pickers = []
+    for row in c.fetchall():
+        picker = dict(row)
+        total_errors = (picker['wrong_amount'] or 0) + (picker['wrong_product'] or 0) + (picker['wrong_pallet'] or 0)
+        total_lines = picker['total_lines'] or 1
+        picker['total_errors'] = total_errors
+        picker['error_rate'] = round((total_errors / total_lines) * 100, 1)
+        pickers.append(picker)
+
+    # Hämta trend data (jämför denna vecka med förra veckan)
+    c.execute("""
+        SELECT 
+            r.picker,
+            SUM(CASE WHEN l.finished_at >= datetime('now', '-7 days') THEN 
+                (CASE WHEN r.checked_qty != r.picked_qty AND r.wrong_product = 0 THEN 1 ELSE 0 END) +
+                r.wrong_product +
+                (CASE WHEN r.pallet_letter != r.correct_pallet AND r.correct_pallet IS NOT NULL THEN 1 ELSE 0 END)
+            ELSE 0 END) as errors_this_week,
+            SUM(CASE WHEN l.finished_at >= datetime('now', '-14 days') AND l.finished_at < datetime('now', '-7 days') THEN 
+                (CASE WHEN r.checked_qty != r.picked_qty AND r.wrong_product = 0 THEN 1 ELSE 0 END) +
+                r.wrong_product +
+                (CASE WHEN r.pallet_letter != r.correct_pallet AND r.correct_pallet IS NOT NULL THEN 1 ELSE 0 END)
+            ELSE 0 END) as errors_last_week,
+            SUM(CASE WHEN l.finished_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END) as lines_this_week,
+            SUM(CASE WHEN l.finished_at >= datetime('now', '-14 days') AND l.finished_at < datetime('now', '-7 days') THEN 1 ELSE 0 END) as lines_last_week
+        FROM check_line_results r
+        JOIN check_logs l ON r.check_log_id = l.id
+        WHERE l.finished_at >= datetime('now', '-14 days')
+        AND r.picker IS NOT NULL AND r.picker != ''
+        GROUP BY r.picker
+    """)
+    
+    trends = {row['picker']: dict(row) for row in c.fetchall()}
+    
+    # Lägg till trend-info till varje plockare
+    for picker in pickers:
+        trend_data = trends.get(picker['picker'], {})
+        this_week = trend_data.get('errors_this_week', 0) or 0
+        last_week = trend_data.get('errors_last_week', 0) or 0
+        lines_this = trend_data.get('lines_this_week', 0) or 1
+        lines_last = trend_data.get('lines_last_week', 0) or 1
+        
+        rate_this = (this_week / lines_this) * 100 if lines_this > 0 else 0
+        rate_last = (last_week / lines_last) * 100 if lines_last > 0 else 0
+        
+        if rate_this < rate_last:
+            picker['trend'] = 'improving'
+        elif rate_this > rate_last:
+            picker['trend'] = 'worsening'
+        else:
+            picker['trend'] = 'stable'
+        
+        picker['errors_this_week'] = this_week
+        picker['errors_last_week'] = last_week
+
+    conn.close()
+
+    # Statistik-sammanfattning
+    total_pickers = len(pickers)
+    pickers_with_errors = len([p for p in pickers if p['total_errors'] > 0])
+    avg_error_rate = round(sum(p['error_rate'] for p in pickers) / total_pickers, 1) if total_pickers > 0 else 0
+
+    return jsonify({
+        "pickers": pickers,
+        "summary": {
+            "total_pickers": total_pickers,
+            "pickers_with_errors": pickers_with_errors,
+            "pickers_without_errors": total_pickers - pickers_with_errors,
+            "avg_error_rate": avg_error_rate
+        }
+    })
+
+
 @app.route("/api/export/checks", methods=["GET"])
 def export_checks():
     """Exportera kontroller som CSV."""
@@ -307,14 +366,15 @@ def export_checks():
     rows = c.fetchall()
     conn.close()
 
-    csv_lines = ["finished_at,sscc,checked_by,total_lines,checked_lines,wrong_amount,wrong_product,wrong_pallet,extra,duration_s"]
+    # Använd semikolon som separator (standard i svenska Excel)
+    csv_lines = ["finished_at;sscc;checked_by;total_lines;checked_lines;wrong_amount;wrong_product;wrong_pallet;extra;duration_s"]
     for r in rows:
-        csv_lines.append(",".join(str(v) if v is not None else "" for v in r))
+        csv_lines.append(";".join(str(v) if v is not None else "" for v in r))
 
-    return "\n".join(csv_lines), 200, {
-        "Content-Type": "text/csv",
-        "Content-Disposition": f"attachment; filename=pickcheck_export_{days}d.csv"
-    }
+    response = make_response("\n".join(csv_lines))
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = f"attachment; filename=pickcheck_export_{days}d.csv"
+    return response
 
 
 # ============ API: Användare ============
@@ -367,6 +427,15 @@ def list_users():
     """Lista alla användare (för admin)."""
     users = db.get_all_users()
     return jsonify(users)
+
+
+@app.route("/api/auth/user/<username>", methods=["GET"])
+def get_user_profile(username):
+    """Hämta uppdaterat visningsnamn för inloggad användare."""
+    user = db.get_user_profile(username)
+    if not user:
+        return jsonify({"error": "Användare hittades inte"}), 404
+    return jsonify(user)
 
 
 @app.route("/api/auth/check-username/<username>", methods=["GET"])

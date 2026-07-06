@@ -10,22 +10,22 @@ PALLETS = [
         "order": "ORD-99231",
         "twoPallets": True,
         "lines": [
-            {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "A25PC017", "product": "Easy Bath Glove Kids Unicorn", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "HST2301", "product": "Brush Set 2pcs 25mm / 50mm Mixed Bristle", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "6617-46930", "product": "Duschgel Dove 720ml Dove", "picker": "0251", "pickedQty": 24, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "7155", "product": "Flying Disc with Launcher", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "TK82865", "product": "Tvålkopp Kotikulta Fjord Ljusgrå Kotikulta", "picker": "0251", "pickedQty": 6, "pallet": "B", "correctPallet": "B"},
-            {"productNumber": "1041001K", "product": "Råttfälla Betesstation SuperCat SuperCat", "picker": "0251", "pickedQty": 10, "pallet": "A", "correctPallet": "B"},
-            {"productNumber": "5138-89289", "product": "Tandkräm Oral B Kids 50ml Oral-B", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "560-71310", "product": "Wettex 10-pack Wettex", "picker": "0251", "pickedQty": 42, "pallet": "B", "correctPallet": "B"},
-            {"productNumber": "6617-57529", "product": "Dove Advanced Stick 72h Cucumber 50ml", "picker": "0251", "pickedQty": 6, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "5661929-60322229405", "product": "Batteri CR2032 5p Tear Off Varta", "picker": "0251", "pickedQty": 20, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "69615", "product": "Pensel Pro 12mm softgrip Bristle Bristle", "picker": "0251", "pickedQty": 24, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "6684-871869769966", "product": "Ljuskälla Philips LED 60W A60 E27", "picker": "0251", "pickedQty": 8, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "6617-14777", "product": "Zendium Sensitive 2-pack", "picker": "0251", "pickedQty": 25, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "6617-26700", "product": "Deodorant Dove Mens Care 72h 50ml Dove Men", "picker": "0251", "pickedQty": 12, "pallet": "B", "correctPallet": "A"},
-            {"productNumber": "6617-27479", "product": "Deodorant Rexona Roll-On 50ml Rexona", "picker": "0251", "pickedQty": 12, "pallet": "B", "correctPallet": "B"},
+            {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "gtin": "8710447448328", "gtinInner": "8710447448311", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "A25PC017", "product": "Easy Bath Glove Kids Unicorn", "gtin": "5701234567890", "gtinInner": "5701234567883", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "HST2301", "product": "Brush Set 2pcs 25mm / 50mm Mixed Bristle", "gtin": "7312345678901", "gtinInner": "7312345678895", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "6617-46930", "product": "Duschgel Dove 720ml Dove", "gtin": "8710447469308", "gtinInner": "8710447469292", "picker": "0251", "pickedQty": 24, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "7155", "product": "Flying Disc with Launcher", "gtin": "5412345678901", "gtinInner": "5412345678895", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "TK82865", "product": "Tvålkopp Kotikulta Fjord Ljusgrå Kotikulta", "gtin": "6410012345678", "gtinInner": "6410012345661", "picker": "0251", "pickedQty": 6, "pallet": "B", "correctPallet": "B"},
+            {"productNumber": "1041001K", "product": "Råttfälla Betesstation SuperCat SuperCat", "gtin": "4006123456789", "gtinInner": "4006123456772", "picker": "0251", "pickedQty": 10, "pallet": "A", "correctPallet": "B"},
+            {"productNumber": "5138-89289", "product": "Tandkräm Oral B Kids 50ml Oral-B", "gtin": "8001090892898", "gtinInner": "8001090892881", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "560-71310", "product": "Wettex 10-pack Wettex", "gtin": "7310791713106", "gtinInner": "7310791713090", "picker": "0251", "pickedQty": 42, "pallet": "B", "correctPallet": "B"},
+            {"productNumber": "6617-57529", "product": "Dove Advanced Stick 72h Cucumber 50ml", "gtin": "8710447575291", "gtinInner": "8710447575284", "picker": "0251", "pickedQty": 6, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "5661929-60322229405", "product": "Batteri CR2032 5p Tear Off Varta", "gtin": "4008496929405", "gtinInner": "4008496929399", "picker": "0251", "pickedQty": 20, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "69615", "product": "Pensel Pro 12mm softgrip Bristle Bristle", "gtin": "7391234567890", "gtinInner": "7391234567883", "picker": "0251", "pickedQty": 24, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "6684-871869769966", "product": "Ljuskälla Philips LED 60W A60 E27", "gtin": "8718697699669", "gtinInner": "8718697699652", "picker": "0251", "pickedQty": 8, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "6617-14777", "product": "Zendium Sensitive 2-pack", "gtin": "8710447147771", "gtinInner": "8710447147764", "picker": "0251", "pickedQty": 25, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "6617-26700", "product": "Deodorant Dove Mens Care 72h 50ml Dove Men", "gtin": "8710447267004", "gtinInner": "8710447266991", "picker": "0251", "pickedQty": 12, "pallet": "B", "correctPallet": "A"},
+            {"productNumber": "6617-27479", "product": "Deodorant Rexona Roll-On 50ml Rexona", "gtin": "8710447274798", "gtinInner": "8710447274781", "picker": "0251", "pickedQty": 12, "pallet": "B", "correctPallet": "B"},
         ]
     },
     {
@@ -33,11 +33,11 @@ PALLETS = [
         "order": "ORD-99245",
         "twoPallets": False,
         "lines": [
-            {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "picker": "0312", "pickedQty": 6, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "6617-46930", "product": "Duschgel Dove 720ml Dove", "picker": "0312", "pickedQty": 18, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "560-71310", "product": "Wettex 10-pack Wettex", "picker": "0312", "pickedQty": 30, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "5138-89289", "product": "Tandkräm Oral B Kids 50ml Oral-B", "picker": "0312", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "7155", "product": "Flying Disc with Launcher", "picker": "0312", "pickedQty": 9, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "gtin": "8710447448328", "gtinInner": "8710447448311", "picker": "0312", "pickedQty": 6, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "6617-46930", "product": "Duschgel Dove 720ml Dove", "gtin": "8710447469308", "gtinInner": "8710447469292", "picker": "0312", "pickedQty": 18, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "560-71310", "product": "Wettex 10-pack Wettex", "gtin": "7310791713106", "gtinInner": "7310791713090", "picker": "0312", "pickedQty": 30, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "5138-89289", "product": "Tandkräm Oral B Kids 50ml Oral-B", "gtin": "8001090892898", "gtinInner": "8001090892881", "picker": "0312", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "7155", "product": "Flying Disc with Launcher", "gtin": "5412345678901", "gtinInner": "5412345678895", "picker": "0312", "pickedQty": 9, "pallet": "A", "correctPallet": "A"},
         ]
     },
     {
@@ -45,11 +45,40 @@ PALLETS = [
         "order": "ORD-99300",
         "twoPallets": False,
         "lines": [
-            {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "picker": "0415", "pickedQty": 24, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "A25PC017", "product": "Easy Bath Glove Kids Unicorn", "picker": "0415", "pickedQty": 6, "pallet": "A", "correctPallet": "A"},
-            {"productNumber": "69615", "product": "Pensel Pro 12mm softgrip Bristle Bristle", "picker": "0415", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "gtin": "8710447448328", "gtinInner": "8710447448311", "picker": "0415", "pickedQty": 24, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "A25PC017", "product": "Easy Bath Glove Kids Unicorn", "gtin": "5701234567890", "gtinInner": "5701234567883", "picker": "0415", "pickedQty": 6, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "69615", "product": "Pensel Pro 12mm softgrip Bristle Bristle", "gtin": "7391234567890", "gtinInner": "7391234567883", "picker": "0415", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+        ]
+    },
+    {
+        # Demo: stor order — A och B fylldes, overflow plockades på C-pall (Vardacco/IMI-scenario)
+        "sscc": "173308781029514909",
+        "order": "ORD-99400",
+        "twoPallets": True,
+        "lines": [
+            {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "gtin": "8710447448328", "gtinInner": "8710447448311", "picker": "0312", "pickedQty": 24, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "6617-46930", "product": "Duschgel Dove 720ml Dove", "gtin": "8710447469308", "gtinInner": "8710447469292", "picker": "0312", "pickedQty": 18, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "HST2301", "product": "Brush Set 2pcs 25mm / 50mm Mixed Bristle", "gtin": "7312345678901", "gtinInner": "7312345678895", "picker": "0312", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "5138-89289", "product": "Tandkräm Oral B Kids 50ml Oral-B", "gtin": "8001090892898", "gtinInner": "8001090892881", "picker": "0312", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "7155", "product": "Flying Disc with Launcher", "gtin": "5412345678901", "gtinInner": "5412345678895", "picker": "0312", "pickedQty": 12, "pallet": "A", "correctPallet": "A"},
+            {"productNumber": "560-71310", "product": "Wettex 10-pack Wettex", "gtin": "7310791713106", "gtinInner": "7310791713090", "picker": "0312", "pickedQty": 36, "pallet": "B", "correctPallet": "B"},
+            {"productNumber": "TK82865", "product": "Tvålkopp Kotikulta Fjord Ljusgrå Kotikulta", "gtin": "6410012345678", "gtinInner": "6410012345661", "picker": "0312", "pickedQty": 12, "pallet": "B", "correctPallet": "B"},
+            {"productNumber": "6617-57529", "product": "Dove Advanced Stick 72h Cucumber 50ml", "gtin": "8710447575291", "gtinInner": "8710447575284", "picker": "0312", "pickedQty": 12, "pallet": "B", "correctPallet": "B"},
+            {"productNumber": "69615", "product": "Pensel Pro 12mm softgrip Bristle Bristle", "gtin": "7391234567890", "gtinInner": "7391234567883", "picker": "0312", "pickedQty": 18, "pallet": "B", "correctPallet": "B"},
+            {"productNumber": "1041001K", "product": "Råttfälla Betesstation SuperCat SuperCat", "gtin": "4006123456789", "gtinInner": "4006123456772", "picker": "0312", "pickedQty": 10, "pallet": "C", "correctPallet": "C"},
+            {"productNumber": "5661929-60322229405", "product": "Batteri CR2032 5p Tear Off Varta", "gtin": "4008496929405", "gtinInner": "4008496929399", "picker": "0312", "pickedQty": 20, "pallet": "C", "correctPallet": "C"},
+            {"productNumber": "A25PC017", "product": "Easy Bath Glove Kids Unicorn", "gtin": "5701234567890", "gtinInner": "5701234567883", "picker": "0312", "pickedQty": 6, "pallet": "C", "correctPallet": "C"},
+            {"productNumber": "6617-27479", "product": "Deodorant Rexona Roll-On 50ml Rexona", "gtin": "8710447274798", "gtinInner": "8710447274781", "picker": "0312", "pickedQty": 12, "pallet": "C", "correctPallet": "C"},
         ]
     }
+]
+
+
+USERS = [
+    {"username": "admin", "password": "admin123", "display_name": "Administrator", "role": "admin"},
+    {"username": "kennart", "password": "test", "display_name": "Kennart", "role": "user"},
+    {"username": "plockare1", "password": "test", "display_name": "Anna Andersson", "role": "user"},
+    {"username": "plockare2", "password": "test", "display_name": "Erik Eriksson", "role": "user"},
 ]
 
 
@@ -57,7 +86,15 @@ def seed():
     print("Initierar databas...")
     db.init_db()
 
-    print("Lägger in testpallar...")
+    print("Lägger in testanvändare...")
+    for u in USERS:
+        try:
+            db.register_user(u["username"], u["password"], u["display_name"], u["role"])
+            print(f"  - {u['username']} ({u['display_name']}, {u['role']})")
+        except Exception as e:
+            print(f"  - {u['username']} finns redan")
+
+    print("\nLägger in testpallar...")
     for p in PALLETS:
         db.save_pallet(
             sscc=p["sscc"],
@@ -67,7 +104,7 @@ def seed():
         )
         print(f"  - {p['sscc']} ({p['order']}, {len(p['lines'])} rader)")
 
-    print(f"\nKlart! {len(PALLETS)} pallar tillagda.")
+    print(f"\nKlart! {len(USERS)} användare och {len(PALLETS)} pallar tillagda.")
     print(f"Databas: {db.DB_PATH}")
 
 

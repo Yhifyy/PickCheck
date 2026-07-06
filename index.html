@@ -24,21 +24,21 @@
       <div id="login-error" class="auth-error hidden"></div>
       
       <!-- Login form -->
-      <form id="login-form" class="auth-form" autocomplete="off">
+      <form id="login-form" class="auth-form" autocomplete="on">
         <div class="field">
           <span class="icon">&#128100;</span>
-          <input type="text" id="login-user" placeholder="Användarnamn" />
+          <input type="text" id="login-user" name="username" placeholder="Användarnamn" autocomplete="username" />
         </div>
         <div class="field">
           <span class="icon">&#128274;</span>
-          <input type="password" id="login-pass" placeholder="Lösenord" />
+          <input type="password" id="login-pass" name="password" placeholder="Lösenord" autocomplete="current-password" />
           <span class="toggle" id="pass-toggle">&#128065;</span>
         </div>
         <button type="submit" class="btn btn-block">Logga in</button>
       </form>
       
       <!-- Register form -->
-      <form id="register-form" class="auth-form hidden" autocomplete="off">
+      <form id="register-form" class="auth-form hidden" autocomplete="on">
         <div class="field">
           <span class="icon">&#128100;</span>
           <input type="text" id="reg-user" placeholder="Användarnamn (minst 2 tecken)" />
@@ -145,8 +145,16 @@
 
           <div class="entry-row">
             <div class="input-group">
-              <label for="scan-input">Skanna produkt (artikelnr)</label>
-              <input type="text" id="scan-input" placeholder="Skanna vara → hoppar till rätt rad" size="32" />
+              <label for="scan-input">Product</label>
+              <input type="text" id="scan-input" placeholder="Skanna artikelnr eller GTIN" size="28" />
+            </div>
+            <div class="input-group">
+              <label for="amount-input">Amount</label>
+              <input type="number" id="amount-input" placeholder="Antal" value="" size="6" />
+            </div>
+            <div class="input-group">
+              <label>&nbsp;</label>
+              <button class="btn btn-submit" id="submit-scan-btn">Submit</button>
             </div>
           </div>
 
@@ -162,8 +170,8 @@
                 <th>Productnumber</th>
                 <th>Product</th>
                 <th>Picker</th>
-                <th>Picked</th>
-                <th>Checked</th>
+                <th>Plockat</th>
+                <th>Kontrollerat</th>
                 <th>Checktime</th>
               </tr>
             </thead>
@@ -171,10 +179,13 @@
           </table>
 
           <div class="hint">
+            <strong>Tips:</strong>
+            Klicka på en rad och skanna paketet – fel artikelnummer markeras automatiskt &nbsp;·&nbsp;
+            Klicka raden igen, <kbd>Esc</kbd> eller Product-fältet = avmarkera &nbsp;·&nbsp;
             <strong>Tangentbord:</strong>
-            <kbd>Enter</kbd> i antalsfältet = bekräfta &amp; hoppa till nästa &nbsp;·&nbsp;
+            <kbd>Enter</kbd> i antalsfältet = bekräfta (adderas till totalt, flera rader samtidigt) &nbsp;·&nbsp;
             <kbd>&#8593;</kbd>/<kbd>&#8595;</kbd> byt rad &nbsp;·&nbsp;
-            <kbd>Shift</kbd>+<kbd>Enter</kbd> flagga fel produkt &nbsp;·&nbsp;
+            <kbd>Shift</kbd>+<kbd>Enter</kbd> manuell fel produkt &nbsp;·&nbsp;
             <kbd>F2</kbd> ny pall (SSCC) &nbsp;·&nbsp;
             <kbd>F4</kbd> Finish Check &nbsp;·&nbsp;
             <kbd>F6</kbd> ångra check
@@ -275,10 +286,8 @@
         const avgTime = data.today.avg_duration;
         document.getElementById("dash-avg-time").textContent = avgTime ? Math.round(avgTime) + "s" : "-";
         
-        // Mark errors card if there are errors
-        if (data.today.errors_today > 0) {
-          document.getElementById("dash-today-errors").parentElement.classList.add("error");
-        }
+        const errCard = document.getElementById("dash-today-errors").parentElement;
+        errCard.classList.toggle("error", (data.today.errors_today || 0) > 0);
         
         // Recent checks
         const recentEl = document.getElementById("dash-recent-list");
@@ -302,8 +311,22 @@
         console.log("Could not load dashboard");
       }
     }
-    
+
+    function scheduleDashboardRefresh() {
+      const now = new Date();
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      setTimeout(() => {
+        loadDashboard();
+        scheduleDashboardRefresh();
+      }, midnight.getTime() - now.getTime());
+    }
+
     loadDashboard();
+    scheduleDashboardRefresh();
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) loadDashboard();
+    });
   </script>
 </body>
 </html>

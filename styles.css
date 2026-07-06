@@ -287,6 +287,23 @@ html, body {
 
 .entry-row { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 
+.btn-submit {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  padding: 8px 20px;
+  font-size: 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.btn-submit:hover { background: var(--blue-dark); }
+
+#amount-input {
+  width: 80px;
+  text-align: center;
+}
+
 .filter-bar { display: flex; gap: 6px; margin: 10px 0; }
 .filter-btn {
   border: 1px solid var(--border);
@@ -316,18 +333,70 @@ tr.active-row td { background: var(--blue-light); }
 tr.active-row td:first-child { box-shadow: inset 3px 0 0 var(--blue); }
 tr.ok-row td { background: var(--green-light); }
 tr.error-row td { background: var(--red-light); }
+tr.unknown-product-row td {
+  background: #fde7e9;
+  border-top: 2px solid var(--red);
+}
+tr.unknown-product-row td:first-child {
+  box-shadow: inset 4px 0 0 var(--red);
+}
+.unknown-product-label {
+  color: var(--red);
+  font-weight: 700;
+  font-size: 12px;
+}
+.unknown-pallet-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--red);
+  white-space: nowrap;
+}
 tr.dim td { color: #a19f9d; }
 
+.picked-qty, .checked-qty-cell { text-align: center; font-weight: 600; }
+
+.qty-ratio-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.qty-extra {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--red);
+  white-space: nowrap;
+  width: 100%;
+  text-align: center;
+}
+
 .qty-input {
-  width: 70px;
+  width: 56px;
   border: 1px solid var(--border);
   padding: 5px 6px;
   font-size: 13px;
+  font-weight: 600;
   text-align: center;
   border-radius: 2px;
   outline: none;
 }
 .qty-input:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(0,103,184,.3); }
+.qty-input.qty-match {
+  background: #dff6dd;
+  border-color: var(--green);
+  color: var(--green);
+}
+.qty-input.qty-mismatch {
+  background: var(--red-light);
+  border-color: var(--red);
+  color: var(--red);
+}
 
 .status-cell { font-weight: 700; text-align: center; width: 30px; }
 .status-ok { color: var(--green); }
@@ -343,8 +412,9 @@ tr.dim td { color: #a19f9d; }
   text-align: center;
   color: #fff;
 }
-.pill-A { background: var(--blue); }
-.pill-B { background: #6b2fb3; }
+.pill-A { background: #0078d4; } /* Blå */
+.pill-B { background: #6b2fb3; } /* Lila */
+.pill-C, .pill-D, .pill-E, .pill-F, .pill-G, .pill-H { background: #333; } /* Svart */
 .pallet-arrow { color: var(--red); font-weight: 700; }
 
 /* ---------- Statistics ---------- */

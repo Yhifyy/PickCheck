@@ -165,15 +165,16 @@
       try {
         const res = await fetch(`${API}/check/search?${params}`);
         const data = await res.json();
-        renderResults(data);
+        renderResults(data, picker);
       } catch (err) {
         document.getElementById("results-body").innerHTML = '<p class="no-results">Kunde inte söka</p>';
       }
     }
 
-    function renderResults(checks) {
+    function renderResults(checks, pickerFilter) {
       const container = document.getElementById("results-body");
       const countEl = document.getElementById("results-count");
+      const showPicker = Boolean(pickerFilter);
 
       if (!checks || checks.length === 0) {
         container.innerHTML = '<p class="no-results">Inga kontroller hittades</p>';
@@ -189,6 +190,7 @@
             <tr>
               <th>Datum</th>
               <th>SSCC</th>
+              ${showPicker ? '<th>Plockare</th>' : ''}
               <th>Kontrollant</th>
               <th class="num">Rader</th>
               <th class="num">Fel</th>
@@ -203,10 +205,12 @@
               const statusText = totalErrors > 0 ? `${totalErrors} fel` : 'OK';
               const date = new Date(c.finished_at).toLocaleString('sv-SE');
               const duration = c.duration_seconds ? `${Math.round(c.duration_seconds)}s` : '-';
+              const pickers = (c.pickers || []).join(', ') || pickerFilter || '-';
               return `
                 <tr onclick="showDetail(${c.id})">
                   <td>${date}</td>
                   <td><strong>${c.sscc}</strong></td>
+                  ${showPicker ? `<td><strong>${pickers}</strong></td>` : ''}
                   <td>${c.checked_by || '-'}</td>
                   <td class="num">${c.checked_lines}/${c.total_lines}</td>
                   <td class="num">${totalErrors}</td>
@@ -240,9 +244,16 @@
       const log = data.log;
       const lines = data.lines || [];
       const extras = data.extras || [];
+      const lineExtraCodes = new Set(
+        lines.filter((l) => l.picked_qty === 0 && l.wrong_product).map((l) => l.product_number)
+      );
+      const uniqueExtras = extras.filter((e) => !lineExtraCodes.has(e.product_code));
+      const extraPieces = extras.reduce((sum, e) => sum + (e.scan_count || 0), 0);
 
       const date = new Date(log.finished_at).toLocaleString('sv-SE');
       const duration = log.duration_seconds ? `${Math.round(log.duration_seconds)} sekunder` : '-';
+      const totalErrors = (log.wrong_amount_count || 0) + (log.wrong_product_count || 0)
+        + (log.wrong_pallet_count || 0) + (log.extra_count || 0);
 
       document.getElementById("detail-body").innerHTML = `
         <div class="detail-grid">
@@ -267,6 +278,10 @@
             <value>${log.checked_lines} / ${log.total_lines}</value>
           </div>
           <div class="detail-item">
+            <label>Totalt avvikelser</label>
+            <value style="color: ${totalErrors ? 'var(--red)' : 'inherit'}">${totalErrors}</value>
+          </div>
+          <div class="detail-item">
             <label>Fel antal</label>
             <value style="color: ${log.wrong_amount_count ? 'var(--red)' : 'inherit'}">${log.wrong_amount_count || 0}</value>
           </div>
@@ -277,6 +292,10 @@
           <div class="detail-item">
             <label>Fel pall</label>
             <value style="color: ${log.wrong_pallet_count ? 'var(--red)' : 'inherit'}">${log.wrong_pallet_count || 0}</value>
+          </div>
+          <div class="detail-item">
+            <label>Extra artiklar</label>
+            <value style="color: ${log.extra_count ? 'var(--red)' : 'inherit'}">${log.extra_count || 0}${extraPieces ? ` (${extraPieces} st totalt)` : ''}</value>
           </div>
         </div>
 
@@ -297,14 +316,24 @@
                 ${lines.map(l => {
                   let status = 'OK';
                   let color = 'var(--green)';
-                  if (l.wrong_product) { status = 'Fel produkt'; color = 'var(--red)'; }
-                  else if (l.checked_qty !== l.picked_qty) { status = `Diff: ${l.checked_qty - l.picked_qty}`; color = 'var(--red)'; }
-                  else if (l.pallet_letter !== l.correct_pallet) { status = 'Fel pall'; color = 'var(--amber)'; }
+                  if (l.picked_qty === 0 && l.wrong_product) {
+                    status = 'Finns ej på pall';
+                    color = 'var(--red)';
+                  } else if (l.wrong_product) {
+                    status = 'Fel produkt';
+                    color = 'var(--red)';
+                  } else if (l.pallet_letter !== l.correct_pallet && l.correct_pallet) {
+                    status = 'Fel pall';
+                    color = 'var(--amber)';
+                  } else if (l.checked_qty !== l.picked_qty) {
+                    status = `Diff: ${l.checked_qty - l.picked_qty}`;
+                    color = 'var(--red)';
+                  }
                   return `
                     <tr>
                       <td>${l.product_number} - ${l.product_name || ''}</td>
                       <td>${l.picker || '-'}</td>
-                      <td>${l.picked_qty}</td>
+                      <td>${l.picked_qty === 0 && l.wrong_product ? '—' : l.picked_qty}</td>
                       <td>${l.checked_qty}</td>
                       <td style="color: ${color}">${status}</td>
                     </tr>
@@ -315,7 +344,7 @@
           </div>
         ` : ''}
 
-        ${extras.length > 0 ? `
+        ${uniqueExtras.length > 0 ? `
           <div class="detail-lines">
             <h4>Extra skannade produkter</h4>
             <table>
@@ -323,7 +352,7 @@
                 <tr><th>Artikelnummer</th><th>Antal</th></tr>
               </thead>
               <tbody>
-                ${extras.map(e => `<tr><td>${e.product_number}</td><td>${e.quantity}</td></tr>`).join('')}
+                ${uniqueExtras.map(e => `<tr><td>${e.product_code || '-'}</td><td>${e.scan_count ?? '-'}</td></tr>`).join('')}
               </tbody>
             </table>
           </div>
