@@ -63,7 +63,7 @@ Lagerkontrollsystem för Dollarstore - används för att kontrollera pallar efte
 ## Inloggning
 
 Skapa ett konto via "Skapa konto"-fliken eller använd testanvändare:
-- **Användarnamn:** `kennart`
+- **Användarnamn:** `krenart`
 - **Lösenord:** `test`
 
 ## Projektstruktur

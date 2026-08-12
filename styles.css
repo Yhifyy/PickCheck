@@ -517,8 +517,8 @@ tr.dim td { color: #a19f9d; }
   --border: #34495e;
   --text: #ecf0f1;
 }
-.dark-mode body,
-.dark-mode html { background: #1a1a2e; }
+html.dark-mode,
+.dark-mode body { background: #1a1a2e; color: var(--text); }
 .dark-mode .login-card,
 .dark-mode .dash-card,
 .dark-mode .dash-recent,
@@ -536,10 +536,37 @@ tr.dim td { color: #a19f9d; }
 .dark-mode input,
 .dark-mode select { background: #1a1a2e; color: var(--text); border-color: var(--border); }
 .dark-mode input::placeholder { color: var(--gray); }
-.dark-mode .hint kbd { background: #2c3e50; }
+.dark-mode .hint kbd { background: #2c3e50; color: var(--text); }
 .dark-mode #lines-table th { background: #0f3460; }
 .dark-mode #lines-table tr:hover td { background: #1a3a5c; }
+.dark-mode thead th { background: #0f3460; color: var(--gray); }
+.dark-mode tbody td { border-bottom-color: var(--border); }
+.dark-mode .filter-btn { background: #1a1a2e; color: var(--text); border-color: var(--border); }
+.dark-mode .filter-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+.dark-mode .workspace { background: #1a1a2e; }
+.dark-mode .main-col,
+.dark-mode .side-col { background: transparent; }
+.dark-mode .pallet-title { color: var(--text); }
+.dark-mode .page-brand .brand-name { color: var(--text); }
+.dark-mode .qty-input { background: #1a1a2e; color: var(--text); border-color: var(--border); }
+.dark-mode .qty-input.qty-match { background: #1a4731; border-color: var(--green); color: var(--green); }
+.dark-mode .qty-input.qty-mismatch { background: #5c1a1a; border-color: var(--red); color: var(--red); }
+.dark-mode tr.unknown-product-row td { background: #5c1a1a; border-top-color: var(--red); }
+.dark-mode tr.ok-row td { background: #1a4731; }
+.dark-mode tr.error-row td { background: #5c1a1a; }
+.dark-mode tr.active-row td { background: #1a3a5c; }
+.dark-mode .sidebar-nav a { color: var(--text); }
+.dark-mode .user-dropdown a { color: var(--text); }
+.dark-mode .user-dropdown a:hover { background: var(--gray-light); }
+.dark-mode .dash-recent-item { border-bottom-color: var(--border); }
 .dark-mode .data-table th { background: #0f3460; }
+.dark-mode .data-table td { border-bottom-color: var(--border); color: var(--text); }
+.dark-mode .hint { color: var(--gray); }
+.dark-mode label { color: var(--gray); }
+
+/* Plats- och typ-kolumner */
+.location-cell { font-family: "Consolas", "Courier New", monospace; font-weight: 600; white-space: nowrap; }
+.type-cell { font-size: 0.85em; white-space: nowrap; }
 
 /* Dark mode toggle button */
 .theme-toggle {

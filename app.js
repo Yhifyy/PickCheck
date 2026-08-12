@@ -456,21 +456,24 @@ function applyScanToLine(idx, amount) {
 
   const n = line.checkedQty, m = line.pickedQty;
   const isCorrect = (n === m) && !isWrongPallet(line);
+  const loc = line.location || "okänd plats";
+  const typ = line.packageType || "st";
 
   if (amount < 0) {
     banner("ok", `Korrigerat: ${line.product} – nu ${n}/${m}`, false);
     beep("ok");
   } else if (isWrongPallet(line)) {
-    banner("error", `FEL PALL: ${line.product} ligger på ${line.pallet} men ska på ${line.correctPallet} (räknat ${n})`, true);
+    banner("error", `FEL PALL: ${line.product} ligger på ${line.pallet} men ska på ${line.correctPallet} (räknat ${n}) — Plats: ${loc}`, true);
     beep("error");
   } else if (n > m) {
-    banner("error", `EXTRA: ${line.product} – ${n} (+${n - m} extra)`, true);
+    const extra = n - m;
+    banner("error", `FÖR MYCKET: ${line.product} – ${extra} ${typ} för mycket. Lämna tillbaka ${extra} ${typ} till plats ${loc}`, true);
     beep("error");
   } else if (n === m) {
-    banner("ok", `Klar: ${line.product} – ${n}/${m}`, false);
+    banner("ok", `Klar: ${line.product} – ${n}/${m} ${typ}`, false);
     beep("ok");
   } else {
-    banner("ok", `${line.product} – räknat ${n}/${m}`, false);
+    banner("ok", `${line.product} – räknat ${n}/${m} ${typ}`, false);
     beep("ok");
   }
 
@@ -504,7 +507,7 @@ function applyUnknownProductScan(code, amount) {
   } else {
     lines.push({
       productNumber: code,
-      product: "FINNS EJ PÅ PALLEN – fel produkt plockad",
+      product: "Ska inte finnas med på pall",
       gtin: "",
       gtinInner: "",
       picker: "—",
@@ -531,7 +534,7 @@ function applyUnknownProductScan(code, amount) {
 
   const line = lines[idx];
   banner("error",
-    `FEL PRODUKT – FINNS EJ PÅ PALLEN: ${code} (räknat ${line.checkedQty})`, true);
+    `Ska inte finnas med på pall: ${code} (räknat ${line.checkedQty})`, true);
   beep("error");
   refocusScan();
   return false;
@@ -646,7 +649,7 @@ function renderLines() {
     let palletPill = "";
     if (showPallet) {
       if (isUnknown) {
-        palletPill = '<span class="unknown-pallet-badge">EJ PÅ PALL</span>';
+        palletPill = '<span class="unknown-pallet-badge">EJ PÅ PALLEN</span>';
       } else if (wrongPallet) {
         palletPill = `<span class="pill pill-${line.pallet}">${line.pallet}</span>` +
           ` <span class="pallet-arrow">\u2192</span> ` +
@@ -669,11 +672,16 @@ function renderLines() {
       : line.product;
     const pickedCell = isUnknown ? "—" : line.pickedQty;
 
+    const locationCell = isUnknown ? "—" : (line.location || "—");
+    const typeCell = isUnknown ? "—" : (line.packageType || "—");
+
     tr.innerHTML = `
       <td class="status-cell">${statusIcon}</td>
       <td>${palletPill}</td>
+      <td class="location-cell">${locationCell}</td>
       <td>${line.productNumber}</td>
       <td>${productCell}</td>
+      <td class="type-cell">${typeCell}</td>
       <td>${line.picker}</td>
       <td class="picked-qty">${pickedCell}</td>
       <td class="checked-qty-cell">
@@ -837,11 +845,13 @@ function confirmAllQtyInputs(triggerIndex) {
       beep("ok");
     } else {
       beep("error");
+      const loc = line.location || "okänd plats";
+      const typ = line.packageType || "st";
       let diff;
-      if (isWrongPallet(line)) diff = `FEL PALL: ligger på ${line.pallet} men ska på ${line.correctPallet}`;
+      if (isWrongPallet(line)) diff = `FEL PALL: ligger på ${line.pallet} men ska på ${line.correctPallet} — Plats: ${loc}`;
       else if (line.wrongProduct) diff = "fel produkt";
-      else if (newQty > line.pickedQty) diff = `räknat ${newQty} (+${newQty - line.pickedQty} extra)`;
-      else diff = `räknat ${newQty}, plockat ${line.pickedQty}`;
+      else if (newQty > line.pickedQty) diff = `${newQty - line.pickedQty} ${typ} för mycket — Lämna tillbaka till plats ${loc}`;
+      else diff = `${line.pickedQty - newQty} ${typ} saknas — Hämta från plats ${loc}`;
       banner("error", `Avvikelse: ${line.product} (${diff})`);
     }
   } else {
@@ -918,14 +928,23 @@ function updateStats() {
   const unknownLines = lines.filter((l) => l.notOnPallet);
 
   let html = "";
-  html += statsGroup("Wrong amount", wrongAmount.map(
-    (l) => `${l.productNumber} ${l.product} <strong>(${l.checkedQty}${l.checkedQty > l.pickedQty ? ` +${l.checkedQty - l.pickedQty} extra` : l.checkedQty < l.pickedQty ? `, plockat ${l.pickedQty}` : ""})</strong>`));
-  html += statsGroup("Wrong product", wrongProduct.map(
+  html += statsGroup("Fel antal", wrongAmount.map((l) => {
+    const loc = l.location || "okänd plats";
+    const typ = l.packageType || "st";
+    if (l.checkedQty > l.pickedQty) {
+      const extra = l.checkedQty - l.pickedQty;
+      return `${l.productNumber} ${l.product} — <strong>${extra} ${typ} för mycket → Lämna tillbaka till plats ${loc}</strong>`;
+    } else {
+      const missing = l.pickedQty - l.checkedQty;
+      return `${l.productNumber} ${l.product} — <strong>${missing} ${typ} saknas → Hämta från plats ${loc}</strong>`;
+    }
+  }));
+  html += statsGroup("Fel produkt", wrongProduct.map(
     (l) => `${l.productNumber} ${l.product}` + (state.pallet.twoPallets ? ` <span class="pill pill-${l.pallet}">${l.pallet}</span>` : "")));
-  html += statsGroup("Wrong pallet", wrongPallet.map(
-    (l) => `${l.productNumber} ${l.product} <strong>(ligger på <span class="pill pill-${l.pallet}">${l.pallet}</span> \u2192 ska på <span class="pill pill-${l.correctPallet}">${l.correctPallet}</span>)</strong>`));
-  html += statsGroup("Extra product", unknownLines.map(
-    (l) => `${l.productNumber} <strong>FINNS EJ PÅ PALLEN</strong> (räknat ${l.checkedQty})`));
+  html += statsGroup("Fel pall", wrongPallet.map(
+    (l) => `${l.productNumber} ${l.product} <strong>(ligger på <span class="pill pill-${l.pallet}">${l.pallet}</span> \u2192 ska på <span class="pill pill-${l.correctPallet}">${l.correctPallet}</span>) — Plats: ${l.location || "okänd"}</strong>`));
+  html += statsGroup("Ska inte finnas med på pall", unknownLines.map(
+    (l) => `${l.productNumber} <strong>Ska inte finnas med på pall</strong> (räknat ${l.checkedQty}) — Lämna tillbaka`));
 
   if (!wrongAmount.length && !wrongProduct.length && !wrongPallet.length && !unknownLines.length) {
     html = '<div class="stats-empty">\u2714 Inga avvikelser</div>' + html;
@@ -1003,7 +1022,7 @@ function normalizePalletExtras(pallet) {
     if (!pallet.lines.some((l) => l.notOnPallet && l.productNumber === code)) {
       pallet.lines.push({
         productNumber: code,
-        product: "FINNS EJ PÅ PALLEN – fel produkt plockad",
+        product: "Ska inte finnas med på pall",
         gtin: "", gtinInner: "",
         picker: "—", pickedQty: 0, pallet: "—", correctPallet: null,
         checkedQty: count, checked: true, wrongProduct: true, notOnPallet: true,

@@ -73,6 +73,8 @@ def init_db():
             picked_qty INTEGER DEFAULT 0,
             pallet_letter TEXT DEFAULT 'A',
             correct_pallet TEXT DEFAULT 'A',
+            location TEXT,
+            package_type TEXT,
             FOREIGN KEY (sscc) REFERENCES pallets(sscc)
         )
     """)
@@ -166,7 +168,7 @@ def normalize_display_names():
     """Enstaka namnfixar i befintlig data."""
     conn = get_connection()
     c = conn.cursor()
-    c.execute("UPDATE users SET display_name = ? WHERE username = ?", ("Kennart", "kennart"))
+    c.execute("UPDATE users SET display_name = ? WHERE username = ?", ("Krenart", "krenart"))
     c.execute("UPDATE check_logs SET checked_by = ? WHERE checked_by = ?", ("Kennart", "Kennart Svensson"))
     conn.commit()
     conn.close()
@@ -292,7 +294,9 @@ def get_pallet(sscc):
             "picker": l["picker"],
             "pickedQty": l["picked_qty"],
             "pallet": l["pallet_letter"],
-            "correctPallet": l["correct_pallet"]
+            "correctPallet": l["correct_pallet"],
+            "location": l.get("location"),
+            "packageType": l.get("package_type")
         } for l in lines]
     }
 
@@ -312,8 +316,8 @@ def save_pallet(sscc, order_number, two_pallets, lines):
     for line in lines:
         c.execute("""
             INSERT INTO pallet_lines 
-            (sscc, product_number, product_name, gtin, gtin_inner, picker, picked_qty, pallet_letter, correct_pallet)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (sscc, product_number, product_name, gtin, gtin_inner, picker, picked_qty, pallet_letter, correct_pallet, location, package_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             sscc,
             line.get("productNumber"),
@@ -323,7 +327,9 @@ def save_pallet(sscc, order_number, two_pallets, lines):
             line.get("picker"),
             line.get("pickedQty", 0),
             line.get("pallet", "A"),
-            line.get("correctPallet", line.get("pallet", "A"))
+            line.get("correctPallet", line.get("pallet", "A")),
+            line.get("location"),
+            line.get("packageType")
         ))
 
     conn.commit()
