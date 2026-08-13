@@ -568,6 +568,16 @@ html.dark-mode,
 .location-cell { font-family: "Consolas", "Courier New", monospace; font-weight: 600; white-space: nowrap; }
 .type-cell { font-size: 0.85em; white-space: nowrap; }
 
+/* Pallräknare nere till höger under Checktime-kolumnen */
+.pallet-counter {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--blue);
+  padding: 4px 6px 0;
+  font-family: "Consolas", "Courier New", monospace;
+}
+
 /* Dark mode toggle button */
 .theme-toggle {
   cursor: pointer;

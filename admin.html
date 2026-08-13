@@ -110,8 +110,22 @@
   <script>
     const API = "/api";
     let users = [];
+    let currentUser = null;
+
+    function getCurrentUser() {
+      try {
+        const saved = localStorage.getItem("pickcheck_user");
+        if (saved) return JSON.parse(saved);
+      } catch {}
+      return null;
+    }
+
+    function isAdmin() {
+      return currentUser && currentUser.role === "admin";
+    }
 
     async function loadUsers() {
+      currentUser = getCurrentUser();
       try {
         const res = await fetch(`${API}/users`);
         users = await res.json();
@@ -138,11 +152,11 @@
             <div class="user-username">@${u.username}</div>
           </div>
           <span class="user-role ${u.role === 'admin' ? 'admin' : ''}">${u.role}</span>
-          <div class="user-actions">
+          ${isAdmin() ? `<div class="user-actions">
             <button class="btn btn-small btn-secondary" onclick="toggleRole('${u.username}', '${u.role}')">
               ${u.role === 'admin' ? 'Gör till user' : 'Gör till admin'}
             </button>
-          </div>
+          </div>` : ''}
         </li>
       `).join("");
     }
@@ -162,6 +176,11 @@
 
     document.getElementById("reset-form").addEventListener("submit", async (e) => {
       e.preventDefault();
+
+      if (!isAdmin()) {
+        showMessage("Ingen behörighet – bara administratörer kan återställa lösenord", "error");
+        return;
+      }
       
       const username = document.getElementById("reset-user").value;
       const newPassword = document.getElementById("reset-password").value;
@@ -179,7 +198,7 @@
         const res = await fetch(`${API}/admin/reset-password`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, newPassword })
+          body: JSON.stringify({ username, newPassword, requester: currentUser.username })
         });
         const data = await res.json();
         
@@ -195,13 +214,17 @@
     });
 
     async function toggleRole(username, currentRole) {
+      if (!isAdmin()) {
+        showMessage("Ingen behörighet – bara administratörer kan ändra roller", "error");
+        return;
+      }
       const newRole = currentRole === "admin" ? "user" : "admin";
       
       try {
         const res = await fetch(`${API}/admin/set-role`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, role: newRole })
+          body: JSON.stringify({ username, role: newRole, requester: currentUser.username })
         });
         const data = await res.json();
         
@@ -247,7 +270,19 @@
     });
     if (localStorage.getItem("pickcheck_dark") === "1") setDarkMode(true);
 
+    // Göm admin-funktioner om användaren inte är admin
+    function updateAdminVisibility() {
+      const resetCard = document.getElementById("reset-form").closest(".admin-card");
+      if (!isAdmin()) {
+        resetCard.style.display = "none";
+      } else {
+        resetCard.style.display = "";
+      }
+    }
+
     // Load on start
+    currentUser = getCurrentUser();
+    updateAdminVisibility();
     loadUsers();
   </script>
 </body>

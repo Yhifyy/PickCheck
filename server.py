@@ -447,11 +447,18 @@ def check_username(username):
 
 @app.route("/api/admin/reset-password", methods=["POST"])
 def admin_reset_password():
-    """Återställ lösenord för en användare (admin-funktion)."""
+    """Återställ lösenord för en användare. Bara admin-användare får göra detta."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Data saknas"}), 400
-    
+
+    requester = data.get("requester", "").strip()
+    if not requester:
+        return jsonify({"error": "Ingen behörighet (requester saknas)"}), 403
+    requester_info = db.get_user_profile(requester)
+    if not requester_info or requester_info.get("role") != "admin":
+        return jsonify({"error": "Ingen behörighet – bara administratörer kan återställa lösenord"}), 403
+
     username = data.get("username", "").strip()
     new_password = data.get("newPassword", "")
     
@@ -471,11 +478,19 @@ def admin_reset_password():
 
 @app.route("/api/admin/set-role", methods=["POST"])
 def admin_set_role():
-    """Sätt roll för en användare (admin-funktion)."""
+    """Sätt roll för en användare. Bara admin-användare får ändra roller."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "Data saknas"}), 400
-    
+
+    requester = data.get("requester", "").strip()
+    if not requester:
+        return jsonify({"error": "Ingen behörighet (requester saknas)"}), 403
+
+    requester_info = db.get_user_profile(requester)
+    if not requester_info or requester_info.get("role") != "admin":
+        return jsonify({"error": "Ingen behörighet – bara administratörer kan ändra roller"}), 403
+
     username = data.get("username", "").strip()
     role = data.get("role", "user")
     

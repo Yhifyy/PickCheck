@@ -917,6 +917,7 @@ function updateProgress() {
   const done = visible.filter((l) => l.checked).length;
   document.getElementById("progress-text").textContent =
     `Kontrollerade ${done} av ${visible.length} produkter`;
+  document.getElementById("pallet-counter").textContent = `${done}/${visible.length}`;
 }
 
 /* ---------- Statistik ---------- */
