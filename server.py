@@ -52,7 +52,8 @@ def create_pallet():
         sscc=data["sscc"],
         order_number=data.get("order"),
         two_pallets=data.get("twoPallets", False),
-        lines=data.get("lines", [])
+        lines=data.get("lines", []),
+        port=data.get("port")
     )
     return jsonify({"success": True, "sscc": data["sscc"]})
 
@@ -138,7 +139,10 @@ def search_checks():
         elif status == "error":
             query += " AND (l.wrong_amount_count + l.wrong_product_count + l.wrong_pallet_count + l.extra_count) > 0"
 
-    query += " ORDER BY finished_at DESC LIMIT ?"
+    if picker:
+        query += " ORDER BY l.finished_at DESC LIMIT ?"
+    else:
+        query += " ORDER BY finished_at DESC LIMIT ?"
     params.append(limit)
 
     c.execute(query, params)
@@ -501,6 +505,84 @@ def admin_set_role():
     if success:
         return jsonify({"success": True, "message": f"{username} är nu {role}"})
     return jsonify({"error": "Kunde inte ändra roll"}), 500
+
+
+## ---------- Kontrollista API ---------- ##
+
+@app.route("/api/targets", methods=["GET"])
+def get_targets():
+    """Hämta aktiva kontrollmål med automatisk pall- och port-info."""
+    targets = db.get_targets_with_pallets()
+    return jsonify(targets)
+
+
+@app.route("/api/targets", methods=["POST"])
+def add_target():
+    """Lägg till ett plockare-ID som ska kontrolleras. Bara admin."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Data saknas"}), 400
+
+    requester = data.get("requester", "").strip()
+    requester_info = db.get_user_profile(requester) if requester else None
+    if not requester_info or requester_info.get("role") != "admin":
+        return jsonify({"error": "Ingen behörighet"}), 403
+
+    picker_id = data.get("pickerId", "").strip()
+    if not picker_id:
+        return jsonify({"error": "Plockare-ID krävs"}), 400
+
+    note = data.get("note", "").strip() or None
+
+    db.add_check_target(picker_id, note=note, added_by=requester)
+    return jsonify({"success": True})
+
+
+@app.route("/api/targets/<int:target_id>", methods=["DELETE"])
+def remove_target(target_id):
+    """Ta bort ett kontrollmål. Bara admin."""
+    requester = request.args.get("requester", "").strip()
+    requester_info = db.get_user_profile(requester) if requester else None
+    if not requester_info or requester_info.get("role") != "admin":
+        return jsonify({"error": "Ingen behörighet"}), 403
+
+    success = db.remove_check_target(target_id)
+    if success:
+        return jsonify({"success": True})
+    return jsonify({"error": "Kontrollmål hittades inte"}), 404
+
+
+@app.route("/api/targets/clear", methods=["POST"])
+def clear_targets():
+    """Rensa alla kontrollmål (nytt skift). Bara admin."""
+    data = request.get_json() or {}
+    requester = data.get("requester", "").strip()
+    requester_info = db.get_user_profile(requester) if requester else None
+    if not requester_info or requester_info.get("role") != "admin":
+        return jsonify({"error": "Ingen behörighet"}), 403
+
+    db.clear_all_targets()
+    return jsonify({"success": True})
+
+
+## ---------- Port-info API ---------- ##
+
+@app.route("/api/pallets-on-ports", methods=["GET"])
+def get_pallets_on_ports():
+    """Hämta pallar som står på portar med automatiska avgångstider."""
+    pallets = db.get_pallets_on_ports()
+    return jsonify({"pallets": pallets})
+
+
+@app.route("/api/suggest-pallet", methods=["GET"])
+def suggest_pallet():
+    """Föreslå en random pall att kontrollera (när targets-pallar inte är tillgängliga)."""
+    exclude = request.args.get("exclude", "")
+    exclude_pickers = [p.strip() for p in exclude.split(",") if p.strip()]
+    pallet = db.get_random_available_pallet(exclude_pickers=exclude_pickers)
+    if pallet:
+        return jsonify({"suggestion": pallet})
+    return jsonify({"suggestion": None})
 
 
 if __name__ == "__main__":

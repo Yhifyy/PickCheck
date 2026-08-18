@@ -56,9 +56,15 @@ def init_db():
             sscc TEXT PRIMARY KEY,
             order_number TEXT,
             two_pallets INTEGER DEFAULT 0,
+            port TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # Migrera: lägg till port om tabellen redan finns utan den
+    try:
+        c.execute("ALTER TABLE pallets ADD COLUMN port TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     # Produktrader per pall
     c.execute("""
@@ -136,6 +142,28 @@ def init_db():
             product_code TEXT NOT NULL,
             scan_count INTEGER DEFAULT 1,
             FOREIGN KEY (check_log_id) REFERENCES check_logs(id)
+        )
+    """)
+
+    # Kontrollista — ansvarig fyller i vilka plockare-ID:n som ska kontrolleras
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS check_targets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            picker_id TEXT NOT NULL,
+            note TEXT,
+            added_by TEXT,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            active INTEGER DEFAULT 1
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_targets_active ON check_targets(active)")
+
+    # Avgångstider per port (när lastbilen går)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS port_schedules (
+            port TEXT PRIMARY KEY,
+            departure_time TEXT NOT NULL,
+            note TEXT
         )
     """)
 
@@ -286,6 +314,7 @@ def get_pallet(sscc):
         "sscc": pallet_row["sscc"],
         "order": pallet_row["order_number"],
         "twoPallets": bool(pallet_row["two_pallets"]),
+        "port": pallet_row["port"] if "port" in dict(pallet_row) else None,
         "lines": [{
             "productNumber": l["product_number"],
             "product": l["product_name"],
@@ -301,15 +330,15 @@ def get_pallet(sscc):
     }
 
 
-def save_pallet(sscc, order_number, two_pallets, lines):
+def save_pallet(sscc, order_number, two_pallets, lines, port=None):
     """Spara eller uppdatera en pall med produktrader."""
     conn = get_connection()
     c = conn.cursor()
 
     c.execute("""
-        INSERT OR REPLACE INTO pallets (sscc, order_number, two_pallets)
-        VALUES (?, ?, ?)
-    """, (sscc, order_number, 1 if two_pallets else 0))
+        INSERT OR REPLACE INTO pallets (sscc, order_number, two_pallets, port)
+        VALUES (?, ?, ?, ?)
+    """, (sscc, order_number, 1 if two_pallets else 0, port))
 
     c.execute("DELETE FROM pallet_lines WHERE sscc = ?", (sscc,))
 
@@ -709,6 +738,185 @@ def set_user_role(username, role):
     conn.commit()
     conn.close()
     return updated
+
+
+## ---------- Kontrollista ---------- ##
+
+def add_check_target(picker_id, note=None, added_by=None):
+    """Lägg till ett plockare-ID som ska kontrolleras."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO check_targets (picker_id, note, added_by)
+        VALUES (?, ?, ?)
+    """, (picker_id.strip(), note, added_by))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def get_active_targets():
+    """Hämta alla aktiva kontrollmål."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT id, picker_id, note, added_by, added_at
+        FROM check_targets WHERE active = 1
+        ORDER BY added_at DESC
+    """)
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def remove_check_target(target_id):
+    """Inaktivera ett kontrollmål (soft delete)."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE check_targets SET active = 0 WHERE id = ?", (target_id,))
+    updated = c.rowcount > 0
+    conn.commit()
+    conn.close()
+    return updated
+
+
+def clear_all_targets():
+    """Rensa alla aktiva kontrollmål (t.ex. vid nytt skift)."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE check_targets SET active = 0 WHERE active = 1")
+    conn.commit()
+    conn.close()
+
+
+def get_pallets_for_picker(picker_id):
+    """Hämta alla pallar som en viss plockare har rader på, inklusive port-info."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT DISTINCT p.sscc, p.order_number, p.port
+        FROM pallets p
+        JOIN pallet_lines pl ON pl.sscc = p.sscc
+        WHERE pl.picker = ?
+        ORDER BY p.created_at DESC
+    """, (picker_id,))
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_targets_with_pallets():
+    """Hämta kontrollmål med automatisk pall- och port-info."""
+    targets = get_active_targets()
+    for t in targets:
+        t["pallets"] = get_pallets_for_picker(t["picker_id"])
+    return targets
+
+
+## ---------- Port-schema (avgångstider — från WMS/systemet) ---------- ##
+
+# Automatiska avgångstider per port — kommer från lagersystemet (WMS/IMI)
+PORT_SCHEDULES = {
+    "Port 1":  {"departure_time": "06:30", "note": "Dagligvaror Syd"},
+    "Port 2":  {"departure_time": "07:00", "note": "ICA Maxi"},
+    "Port 3":  {"departure_time": "07:00", "note": "Willys"},
+    "Port 50": {"departure_time": "08:00", "note": "Norrland"},
+    "Port 51": {"departure_time": "08:30", "note": "Småland"},
+    "Port 52": {"departure_time": "08:00", "note": "Norrland"},
+    "Port 53": {"departure_time": "07:30", "note": "Göteborg"},
+    "Port 54": {"departure_time": "09:00", "note": "Stockholm"},
+    "Port 55": {"departure_time": "08:00", "note": "Malmö"},
+    "Port 56": {"departure_time": "09:30", "note": "Sundsvall"},
+    "Port 57": {"departure_time": "07:00", "note": "Örebro"},
+    "Port 58": {"departure_time": "08:30", "note": "Linköping"},
+    "Port 59": {"departure_time": "09:00", "note": "Umeå"},
+    "Port 60": {"departure_time": "07:30", "note": "Uppsala"},
+    "Port 61": {"departure_time": "10:00", "note": "Luleå"},
+    "Port 62": {"departure_time": "08:00", "note": "Västerås"},
+    "Port 63": {"departure_time": "09:00", "note": "Jönköping"},
+    "Port 64": {"departure_time": "07:30", "note": "Karlstad"},
+    "Port 65": {"departure_time": "08:00", "note": "Helsingborg"},
+    "Port 66": {"departure_time": "09:30", "note": "Gävle"},
+    "Port 67": {"departure_time": "08:00", "note": "Borås"},
+    "Port 68": {"departure_time": "10:00", "note": "Kiruna"},
+    "Port 69": {"departure_time": "07:00", "note": "Halmstad"},
+}
+
+
+def get_all_port_schedules():
+    """Hämta alla port-avgångstider (från systemet)."""
+    return [{"port": k, **v} for k, v in PORT_SCHEDULES.items()]
+
+
+def get_port_departure(port):
+    """Hämta avgångstid för en specifik port."""
+    return PORT_SCHEDULES.get(port)
+
+
+def get_pallets_on_ports():
+    """Hämta alla pallar som har en port tilldelad (för morgon-vy)."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT p.sscc, p.order_number, p.port, p.created_at,
+               GROUP_CONCAT(DISTINCT pl.picker) as pickers
+        FROM pallets p
+        JOIN pallet_lines pl ON pl.sscc = p.sscc
+        WHERE p.port IS NOT NULL AND p.port != ''
+        GROUP BY p.sscc
+        ORDER BY p.port, p.created_at
+    """)
+    pallets = [dict(r) for r in c.fetchall()]
+    conn.close()
+
+    for p in pallets:
+        sched = PORT_SCHEDULES.get(p["port"])
+        p["departure_time"] = sched["departure_time"] if sched else None
+        p["port_note"] = sched["note"] if sched else None
+
+    return pallets
+
+
+def get_random_available_pallet(exclude_pickers=None):
+    """Hitta en random pall som finns på en port och inte tillhör exkluderade plockare."""
+    exclude_pickers = exclude_pickers or []
+    conn = get_connection()
+    c = conn.cursor()
+
+    if exclude_pickers:
+        placeholders = ",".join("?" * len(exclude_pickers))
+        c.execute(f"""
+            SELECT DISTINCT p.sscc, p.order_number, p.port,
+                   GROUP_CONCAT(DISTINCT pl.picker) as pickers
+            FROM pallets p
+            JOIN pallet_lines pl ON pl.sscc = p.sscc
+            WHERE p.port IS NOT NULL AND p.port != ''
+              AND pl.picker NOT IN ({placeholders})
+            GROUP BY p.sscc
+            ORDER BY RANDOM()
+            LIMIT 1
+        """, exclude_pickers)
+    else:
+        c.execute("""
+            SELECT DISTINCT p.sscc, p.order_number, p.port,
+                   GROUP_CONCAT(DISTINCT pl.picker) as pickers
+            FROM pallets p
+            JOIN pallet_lines pl ON pl.sscc = p.sscc
+            WHERE p.port IS NOT NULL AND p.port != ''
+            GROUP BY p.sscc
+            ORDER BY RANDOM()
+            LIMIT 1
+        """)
+
+    row = c.fetchone()
+    conn.close()
+    if row:
+        result = dict(row)
+        sched = PORT_SCHEDULES.get(result["port"])
+        result["departure_time"] = sched["departure_time"] if sched else None
+        result["port_note"] = sched["note"] if sched else None
+        return result
+    return None
 
 
 if __name__ == "__main__":

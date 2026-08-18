@@ -119,6 +119,20 @@
               <div class="dash-label">Snitt kontrolltid</div>
             </div>
           </div>
+          <div class="dash-recent" id="ports-panel" style="display:none;">
+            <h4>&#128674; Pallar på port</h4>
+            <p style="color:var(--gray); font-size:12px; margin:-8px 0 12px;">Pallar som fortfarande står ute — ta dessa innan lastbilen går</p>
+            <div id="ports-dashboard"></div>
+          </div>
+          <div class="dash-recent" id="targets-panel">
+            <h4>&#128203; Att kontrollera</h4>
+            <div id="targets-dashboard"></div>
+          </div>
+          <div class="dash-recent" id="suggestion-panel" style="display:none;">
+            <h4>&#128161; Förslag — kontrollera under tiden</h4>
+            <p style="color:var(--gray); font-size:12px; margin:-8px 0 12px;">Inga pallar redo från dina targets. Här är en pall du kan ta under tiden:</p>
+            <div id="suggestion-dashboard"></div>
+          </div>
           <div class="dash-recent">
             <h4>Senaste kontroller</h4>
             <div id="dash-recent-list"></div>
@@ -138,6 +152,7 @@
           <div class="pallet-title">
             Pallet <span id="pallet-number"></span>
             <span class="order" id="pallet-order"></span>
+            <span id="pallet-port-badge" style="display:none; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600; margin-left:10px;"></span>
             <span id="pallet-current-badge"></span>
           </div>
 
@@ -330,10 +345,167 @@
       }, midnight.getTime() - now.getTime());
     }
 
+    async function loadTargets() {
+      try {
+        const res = await fetch("/api/targets");
+        const targets = await res.json();
+        const container = document.getElementById("targets-dashboard");
+        const panel = document.getElementById("targets-panel");
+
+        if (targets.length === 0) {
+          panel.style.display = "none";
+          loadSuggestion([]);
+          return;
+        }
+        panel.style.display = "";
+
+        // Kolla om det finns pallar med port bland targets
+        const targetPickers = targets.map(t => t.picker_id);
+        const hasAvailablePallets = targets.some(t => t.pallets && t.pallets.some(p => p.port));
+
+        if (!hasAvailablePallets) {
+          loadSuggestion(targetPickers);
+        } else {
+          document.getElementById("suggestion-panel").style.display = "none";
+        }
+
+        container.innerHTML = targets.map(t => {
+          const noteTxt = t.note ? ` <span style="color:var(--gray); font-size:11px;">(${t.note})</span>` : '';
+          let palletsHtml = '';
+          if (t.pallets && t.pallets.length > 0) {
+            palletsHtml = t.pallets.map(p => {
+              const portTxt = p.port || 'Plastmaskin';
+              const portColor = p.port ? 'var(--blue)' : 'var(--amber)';
+              const portBg = p.port ? 'var(--blue-light)' : '#fff3e0';
+              return `<div style="display:flex; align-items:center; gap:6px; margin:3px 0 3px 12px; font-size:12px;">
+                <span style="color:var(--gray);">${p.sscc.slice(-6)}</span>
+                <span style="background:${portBg}; color:${portColor}; padding:1px 8px; border-radius:10px; font-size:11px; font-weight:600;">${portTxt}</span>
+              </div>`;
+            }).join("");
+          } else {
+            palletsHtml = '<div style="margin:3px 0 3px 12px; font-size:11px; color:var(--gray);">Inga pallar på port — väntar</div>';
+          }
+          return `
+            <div style="border-bottom:1px solid var(--gray-light); padding:8px 0;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-weight:700; font-size:15px;">${t.picker_id}</span>
+                ${noteTxt}
+              </div>
+              ${palletsHtml}
+            </div>
+          `;
+        }).join("");
+      } catch {}
+    }
+
+    async function loadSuggestion(targetPickers) {
+      const panel = document.getElementById("suggestion-panel");
+      const container = document.getElementById("suggestion-dashboard");
+      try {
+        const exclude = targetPickers.join(",");
+        const res = await fetch(`/api/suggest-pallet?exclude=${encodeURIComponent(exclude)}`);
+        const data = await res.json();
+
+        if (!data.suggestion) {
+          panel.style.display = "none";
+          return;
+        }
+
+        panel.style.display = "";
+        const s = data.suggestion;
+        const portTxt = s.port || "Okänd";
+        const depTxt = s.departure_time ? `Lastbil kl ${s.departure_time}` : "";
+        const noteTxt = s.port_note ? ` (${s.port_note})` : "";
+
+        container.innerHTML = `
+          <div style="background:var(--blue-light); border-radius:8px; padding:12px 16px;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <span style="font-weight:700; font-size:15px;">ID: ${s.pickers || '—'}</span>
+              <span style="background:#fff; padding:2px 10px; border-radius:10px; font-size:12px; font-weight:600; color:var(--blue);">${portTxt}</span>
+              <span style="font-size:12px; color:var(--gray);">${depTxt}${noteTxt}</span>
+            </div>
+            <div style="margin-top:6px; font-size:12px; color:var(--gray);">
+              SSCC: ${s.sscc} · Order: ${s.order_number}
+            </div>
+          </div>
+        `;
+      } catch { panel.style.display = "none"; }
+    }
+
+    async function loadPortsPallets() {
+      try {
+        const res = await fetch("/api/pallets-on-ports");
+        const data = await res.json();
+        const panel = document.getElementById("ports-panel");
+        const container = document.getElementById("ports-dashboard");
+
+        if (!data.pallets || data.pallets.length === 0) {
+          panel.style.display = "none";
+          return;
+        }
+
+        panel.style.display = "";
+        const now = new Date();
+
+        // Gruppera pallar per port
+        const byPort = {};
+        data.pallets.forEach(p => {
+          if (!byPort[p.port]) byPort[p.port] = { pallets: [], departure_time: p.departure_time, note: p.port_note };
+          byPort[p.port].pallets.push(p);
+        });
+
+        container.innerHTML = Object.entries(byPort).map(([port, info]) => {
+          let timeHtml = '';
+          if (info.departure_time) {
+            const [h, m] = info.departure_time.split(":").map(Number);
+            const dep = new Date(now);
+            dep.setHours(h, m, 0, 0);
+            const diffMs = dep - now;
+            const diffMin = Math.round(diffMs / 60000);
+
+            if (diffMin > 0) {
+              const hrs = Math.floor(diffMin / 60);
+              const mins = diffMin % 60;
+              const timeStr = hrs > 0 ? `${hrs}h ${mins}min` : `${mins} min`;
+              timeHtml = `<span style="background:#e8f5e9; color:#2e7d32; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600;">Lastbil ${info.departure_time} (${timeStr} kvar)</span>`;
+            } else {
+              timeHtml = `<span style="background:#ffebee; color:#c62828; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600;">Lastbil ${info.departure_time} — kan vara borta!</span>`;
+            }
+          }
+          const noteHtml = info.note ? `<span style="color:var(--gray); font-size:11px; margin-left:6px;">(${info.note})</span>` : '';
+
+          const palletsHtml = info.pallets.map(p => {
+            const pickers = p.pickers || '—';
+            return `<div style="display:flex; align-items:center; gap:8px; margin:3px 0 3px 12px; font-size:12px;">
+              <span style="font-family:Consolas,monospace; color:var(--gray);">${p.sscc.slice(-6)}</span>
+              <span style="color:var(--text);">${p.order_number}</span>
+              <span style="color:var(--gray); font-size:11px;">Plockare: ${pickers}</span>
+            </div>`;
+          }).join("");
+
+          return `<div style="border-bottom:1px solid var(--gray-light); padding:8px 0;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font-weight:700; font-size:14px;">${port}</span>
+              ${timeHtml}
+              ${noteHtml}
+              <span style="color:var(--gray); font-size:12px; margin-left:auto;">${info.pallets.length} pall(ar)</span>
+            </div>
+            ${palletsHtml}
+          </div>`;
+        }).join("");
+      } catch {}
+    }
+
     loadDashboard();
+    loadTargets();
+    loadPortsPallets();
     scheduleDashboardRefresh();
+
+    // Uppdatera nedräkning varje minut
+    setInterval(loadPortsPallets, 60000);
+
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) loadDashboard();
+      if (!document.hidden) { loadDashboard(); loadTargets(); loadPortsPallets(); }
     });
   </script>
 </body>

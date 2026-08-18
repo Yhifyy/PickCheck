@@ -98,6 +98,27 @@
       </form>
     </div>
 
+    <!-- Kontrollista -->
+    <div class="admin-card" id="targets-card">
+      <h2>&#128203; Kontrollista – Vilka ska kontrolleras</h2>
+      <p style="color:var(--gray); font-size:13px; margin:-10px 0 16px;">Fyll i plockare-ID:n som kontrollanten ska granska. Systemet hittar automatiskt var pallarna står.</p>
+      <form id="target-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Plockare-ID</label>
+            <input type="text" id="target-picker" placeholder="t.ex. 0312" />
+          </div>
+          <div class="form-group">
+            <label>Notering (valfritt)</label>
+            <input type="text" id="target-note" placeholder="t.ex. Ny via bemanning" />
+          </div>
+          <button type="submit" class="btn btn-small">Lägg till</button>
+        </div>
+      </form>
+      <div id="targets-list" style="margin-top:16px;"></div>
+      <button class="btn btn-small btn-danger" id="clear-targets-btn" style="margin-top:12px;">Rensa alla</button>
+    </div>
+
     <!-- User list -->
     <div class="admin-card">
       <h2>&#128101; Alla användare</h2>
@@ -273,17 +294,111 @@
     // Göm admin-funktioner om användaren inte är admin
     function updateAdminVisibility() {
       const resetCard = document.getElementById("reset-form").closest(".admin-card");
+      const targetsCard = document.getElementById("targets-card");
       if (!isAdmin()) {
         resetCard.style.display = "none";
+        targetsCard.style.display = "none";
       } else {
         resetCard.style.display = "";
+        targetsCard.style.display = "";
       }
     }
+
+    // ---------- Kontrollista ----------
+    let targets = [];
+
+    async function loadTargets() {
+      try {
+        const res = await fetch(`${API}/targets`);
+        targets = await res.json();
+        renderTargets();
+      } catch {}
+    }
+
+    function renderTargets() {
+      const container = document.getElementById("targets-list");
+      if (targets.length === 0) {
+        container.innerHTML = '<div style="color:var(--gray); font-size:13px;">Inga plockare tillagda än</div>';
+        return;
+      }
+      container.innerHTML = `<table style="width:100%; font-size:13px; border-collapse:collapse;">
+        <thead><tr style="border-bottom:2px solid var(--border);">
+          <th style="text-align:left; padding:6px;">ID</th>
+          <th style="text-align:left; padding:6px;">Pallar & Port</th>
+          <th style="text-align:left; padding:6px;">Notering</th>
+          <th style="text-align:left; padding:6px;">Tillagd av</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${targets.map(t => {
+          const pallInfo = (t.pallets && t.pallets.length > 0)
+            ? t.pallets.map(p => {
+                const portTxt = p.port || 'Plastmaskin';
+                return `<span style="display:inline-block; background:var(--blue-light); color:var(--blue); padding:1px 6px; border-radius:8px; font-size:11px; margin:1px 2px;">${portTxt}</span>`;
+              }).join("")
+            : '<span style="color:var(--gray); font-size:11px;">Inga pallar i systemet</span>';
+          return `<tr style="border-bottom:1px solid var(--gray-light);">
+            <td style="padding:8px 6px; font-weight:700;">${t.picker_id}</td>
+            <td style="padding:8px 6px;">${pallInfo}</td>
+            <td style="padding:8px 6px;">${t.note || '—'}</td>
+            <td style="padding:8px 6px; color:var(--gray);">${t.added_by || '—'}</td>
+            <td style="padding:8px 6px;"><button class="btn btn-small btn-danger" onclick="removeTarget(${t.id})">✕</button></td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>`;
+    }
+
+    document.getElementById("target-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!currentUser || !currentUser.username) { showMessage("Du måste vara inloggad", "error"); return; }
+      const pickerId = document.getElementById("target-picker").value.trim();
+      const note = document.getElementById("target-note").value.trim();
+
+      if (!pickerId) { showMessage("Fyll i plockare-ID", "error"); return; }
+
+      try {
+        const res = await fetch(`${API}/targets`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pickerId, note, requester: currentUser.username })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById("target-picker").value = "";
+          document.getElementById("target-note").value = "";
+          loadTargets();
+        } else {
+          showMessage(data.error || "Något gick fel", "error");
+        }
+      } catch { showMessage("Kunde inte ansluta", "error"); }
+    });
+
+    async function removeTarget(id) {
+      if (!currentUser || !currentUser.username) return;
+      try {
+        await fetch(`${API}/targets/${id}?requester=${currentUser.username}`, { method: "DELETE" });
+        loadTargets();
+      } catch {}
+    }
+
+    document.getElementById("clear-targets-btn").addEventListener("click", async () => {
+      if (!currentUser || !currentUser.username) return;
+      if (!confirm("Rensa alla kontrollmål?")) return;
+      try {
+        await fetch(`${API}/targets/clear`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requester: currentUser.username })
+        });
+        loadTargets();
+        showMessage("Alla kontrollmål rensade", "success");
+      } catch {}
+    });
 
     // Load on start
     currentUser = getCurrentUser();
     updateAdminVisibility();
     loadUsers();
+    loadTargets();
   </script>
 </body>
 </html>

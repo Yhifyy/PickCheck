@@ -12,8 +12,17 @@ const state = {
   verifyRow: false,      // true när användaren klickat rad för att verifiera fysiskt paket
   finished: {},          // sscc -> färdig pall (snapshot) som kan återöppnas
   lastFinishedSscc: null, // senast inskickade pall (för F6 / Ångra check)
-  checkStartTime: null   // tidpunkt när pallen öppnades (för att mäta kontrolltid)
+  checkStartTime: null,  // tidpunkt när pallen öppnades (för att mäta kontrolltid)
+  targets: []            // aktiva kontrollmål (plockare-ID:n)
 };
+
+async function loadCheckTargets() {
+  try {
+    const res = await fetch(`${API_BASE}/targets`);
+    if (res.ok) state.targets = await res.json();
+  } catch {}
+}
+loadCheckTargets();
 
 /* ---------- Ljud (genereras, inga filer behövs) ---------- */
 let audioCtx = null;
@@ -91,10 +100,11 @@ function completeLogin(user) {
   state.user = user.displayName || user.username;
   state.checkerUsername = user.username;
   localStorage.setItem("pickcheck_user", JSON.stringify(user));
-  localStorage.setItem("pickcheck_last_username", user.username); // Spara användarnamn för nästa gång
+  localStorage.setItem("pickcheck_last_username", user.username);
   document.getElementById("login-view").classList.add("hidden");
   document.getElementById("app-view").classList.remove("hidden");
   document.getElementById("topbar-user").textContent = "\uD83D\uDC64 " + state.user + " \u25BE";
+  loadCheckTargets();
   focusSscc();
 }
 
@@ -261,6 +271,7 @@ async function doSearch() {
       sscc: src.sscc,
       order: src.order,
       twoPallets: src.twoPallets,
+      port: src.port || null,
       extras: [],
       lines: src.lines.map((l) => ({
         ...l,
@@ -272,6 +283,19 @@ async function doSearch() {
     };
     hideBanner();
     renderPallet();
+
+    // Kolla om plockaren finns i kontrollistan
+    const pickers = [...new Set(state.pallet.lines.map(l => l.picker))];
+    const matchedTargets = state.targets.filter(t => pickers.includes(t.picker_id));
+    if (matchedTargets.length > 0) {
+      const info = matchedTargets.map(t => {
+        let txt = t.picker_id;
+        if (t.note) txt += ` – ${t.note}`;
+        return txt;
+      }).join(", ");
+      banner("warn", `Prioriterad kontroll: ${info}`, true);
+    }
+
     // Fokus på första radens antalsfält
     setTimeout(() => focusLine(firstVisibleIndex()), 0);
   } catch (err) {
@@ -571,6 +595,15 @@ function renderPallet() {
   document.getElementById("pallet-area").classList.remove("hidden");
   document.getElementById("pallet-number").textContent = state.pallet.sscc;
   document.getElementById("pallet-order").textContent = state.pallet.order ? "Order " + state.pallet.order : "";
+  const portBadge = document.getElementById("pallet-port-badge");
+  if (portBadge) {
+    const portTxt = state.pallet.port || "Plastmaskin";
+    const isPort = !!state.pallet.port;
+    portBadge.textContent = portTxt;
+    portBadge.style.background = isPort ? "var(--blue-light)" : "#fff3e0";
+    portBadge.style.color = isPort ? "var(--blue)" : "var(--amber)";
+    portBadge.style.display = "inline-block";
+  }
   renderFilterBar();
   renderLines();
   updateStats();

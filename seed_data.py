@@ -9,6 +9,7 @@ PALLETS = [
         "sscc": "173308781029514906",
         "order": "ORD-99231",
         "twoPallets": True,
+        "port": "Port 2",
         "lines": [
             {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "gtin": "8710447448328", "gtinInner": "8710447448311", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A", "location": "03-12-1A", "packageType": "Ytterbox"},
             {"productNumber": "A25PC017", "product": "Easy Bath Glove Kids Unicorn", "gtin": "5701234567890", "gtinInner": "5701234567883", "picker": "0251", "pickedQty": 12, "pallet": "A", "correctPallet": "A", "location": "03-14-1B", "packageType": "Innerbox"},
@@ -32,6 +33,7 @@ PALLETS = [
         "sscc": "173308781029514907",
         "order": "ORD-99245",
         "twoPallets": False,
+        "port": "Port 52",
         "lines": [
             {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "gtin": "8710447448328", "gtinInner": "8710447448311", "picker": "0312", "pickedQty": 6, "pallet": "A", "correctPallet": "A", "location": "03-12-1A", "packageType": "Ytterbox"},
             {"productNumber": "6617-46930", "product": "Duschgel Dove 720ml Dove", "gtin": "8710447469308", "gtinInner": "8710447469292", "picker": "0312", "pickedQty": 18, "pallet": "A", "correctPallet": "A", "location": "03-15-1A", "packageType": "Ytterbox"},
@@ -44,6 +46,7 @@ PALLETS = [
         "sscc": "173308781029514908",
         "order": "ORD-99300",
         "twoPallets": False,
+        "port": "Port 1",
         "lines": [
             {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "gtin": "8710447448328", "gtinInner": "8710447448311", "picker": "0415", "pickedQty": 24, "pallet": "A", "correctPallet": "A", "location": "03-12-1A", "packageType": "Ytterbox"},
             {"productNumber": "A25PC017", "product": "Easy Bath Glove Kids Unicorn", "gtin": "5701234567890", "gtinInner": "5701234567883", "picker": "0415", "pickedQty": 6, "pallet": "A", "correctPallet": "A", "location": "03-14-1B", "packageType": "Innerbox"},
@@ -55,6 +58,7 @@ PALLETS = [
         "sscc": "173308781029514909",
         "order": "ORD-99400",
         "twoPallets": True,
+        "port": None,  # Ej skannad av outbound - vid plastmaskin
         "lines": [
             {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "gtin": "8710447448328", "gtinInner": "8710447448311", "picker": "0312", "pickedQty": 24, "pallet": "A", "correctPallet": "A", "location": "03-12-1A", "packageType": "Ytterbox"},
             {"productNumber": "6617-46930", "product": "Duschgel Dove 720ml Dove", "gtin": "8710447469308", "gtinInner": "8710447469292", "picker": "0312", "pickedQty": 18, "pallet": "A", "correctPallet": "A", "location": "03-15-1A", "packageType": "Ytterbox"},
@@ -100,9 +104,19 @@ def seed():
             sscc=p["sscc"],
             order_number=p["order"],
             two_pallets=p["twoPallets"],
-            lines=p["lines"]
+            lines=p["lines"],
+            port=p.get("port")
         )
-        print(f"  - {p['sscc']} ({p['order']}, {len(p['lines'])} rader)")
+        port_txt = p.get("port") or "Plastmaskin"
+        print(f"  - {p['sscc']} ({p['order']}, {len(p['lines'])} rader, {port_txt})")
+
+    print("\nLägger in kontrollista (demo)...")
+    db.add_check_target("0312", note="Ny via bemanning", added_by="admin")
+    db.add_check_target("0415", note="Heltid bemanning", added_by="admin")
+    db.add_check_target("0251", note="Slumpmässig kontroll", added_by="admin")
+    print("  - 0312 (Ny via bemanning)")
+    print("  - 0415 (Heltid bemanning)")
+    print("  - 0251 (Slumpmässig kontroll)")
 
     print(f"\nKlart! {len(USERS)} användare och {len(PALLETS)} pallar tillagda.")
     print(f"Databas: {db.DB_PATH}")

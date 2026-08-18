@@ -140,6 +140,9 @@ html, body {
 .btn-finish:hover { background: #0b5a0b; }
 .btn-undo { background: var(--amber); }
 .btn-undo:hover { background: #a8420d; }
+.btn-small { padding: 6px 14px; font-size: 12px; border-radius: 6px; }
+.btn-danger { background: #e74c3c; }
+.btn-danger:hover { background: #c0392b; }
 
 /* ---------- App shell ---------- */
 .topbar {
