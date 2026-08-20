@@ -48,6 +48,23 @@ function beep(type) {
   } catch (e) { /* ljud ej tillgängligt */ }
 }
 
+/* ---------- Hjälpfunktioner ---------- */
+function formatFinishedTime(isoString) {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) {
+    const parts = isoString.split(" ");
+    if (parts.length === 2) return parts[1].substring(0, 5);
+    return isoString;
+  }
+  return d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatOrderNo(order) {
+  if (!order) return "";
+  return String(order).replace(/^ORD-?/i, "");
+}
+
 /* ---------- Banner ---------- */
 let bannerTimer = null;
 function banner(type, msg, sticky) {
@@ -239,9 +256,30 @@ document.getElementById("sscc-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); doSearch(); }
 });
 
+function clearPalletView() {
+  document.getElementById("pallet-area").classList.add("hidden");
+  const siblings = document.getElementById("order-siblings");
+  if (siblings) {
+    siblings.classList.add("hidden");
+    siblings.innerHTML = "";
+  }
+  state.pallet = null;
+  state.sscc = null;
+  state.filter = "ALL";
+  state.activeIndex = -1;
+  state.verifyRow = false;
+  state.checkStartTime = null;
+  setPalletReadOnly(false);
+  hideBanner();
+  focusSscc();
+}
+
 async function doSearch() {
   const sscc = document.getElementById("sscc-input").value.trim();
-  if (!sscc) { focusSscc(); return; }
+  if (!sscc) {
+    clearPalletView();
+    return;
+  }
 
   // Om pallen redan är kontrollerad/inskickad → återöppna med sparad data
   if (state.finished[sscc]) {
@@ -267,12 +305,73 @@ async function doSearch() {
     state.activeIndex = -1;
     state.verifyRow = false;
     state.checkStartTime = Date.now();
+
+    // Om pallen redan har en sparad check → visa den med sparad data i "finished"-läge
+    if (src.lastCheck) {
+      const check = src.lastCheck;
+      const checkLines = check.lines || [];
+      state.pallet = {
+        sscc: src.sscc,
+        order: src.order,
+        twoPallets: src.twoPallets,
+        port: src.port || null,
+        status: src.status || "picking",
+        extras: [],
+        finishedAt: check.finished_at,
+        lastCheckId: check.id,
+        orderPallets: src.orderPallets || [],
+        lines: src.lines.map((l) => {
+          const match = checkLines.find(cl => cl.product_number === l.productNumber);
+          if (match) {
+            return {
+              ...l,
+              checkedQty: match.checked_qty,
+              checked: true,
+              wrongProduct: match.wrong_product === 1,
+              checkTime: match.check_time || check.finished_at
+            };
+          }
+          return { ...l, checkedQty: null, checked: false, wrongProduct: false, checkTime: "" };
+        })
+      };
+      // Lägg till extras (okända produkter)
+      const extras = check.extras || [];
+      extras.forEach(ex => {
+        state.pallet.lines.push({
+          productNumber: ex.product_code,
+          product: "Ska inte finnas med på pall",
+          gtin: "", gtinInner: "",
+          picker: "—", pickedQty: 0, pallet: "—", correctPallet: null,
+          location: "", packageType: "",
+          checkedQty: ex.scan_count, checked: true, wrongProduct: true, notOnPallet: true,
+          checkTime: check.finished_at
+        });
+      });
+
+      // Spara i finished-state så Ångra-knappen fungerar
+      state.finished[sscc] = state.pallet;
+      state.lastFinishedSscc = sscc;
+      updateUnfinishButton();
+
+      hideBanner();
+      renderPallet();
+      setPalletReadOnly(true);
+      banner("warn", `Redan kontrollerad (${formatFinishedTime(check.finished_at)}) — tryck "Ångra check" för att ändra`, true);
+      return;
+    }
+
+    // Ny pall → rensa ångra-knappen
+    state.lastFinishedSscc = null;
+    updateUnfinishButton();
+
     state.pallet = {
       sscc: src.sscc,
       order: src.order,
       twoPallets: src.twoPallets,
       port: src.port || null,
+      status: src.status || "picking",
       extras: [],
+      orderPallets: src.orderPallets || [],
       lines: src.lines.map((l) => ({
         ...l,
         checkedQty: null,
@@ -282,6 +381,7 @@ async function doSearch() {
       }))
     };
     hideBanner();
+    setPalletReadOnly(false);
     renderPallet();
 
     // Kolla om plockaren finns i kontrollistan
@@ -306,6 +406,18 @@ async function doSearch() {
   }
 }
 
+function setPalletReadOnly(readOnly) {
+  const entryRow = document.querySelector(".entry-row");
+  const finishBtn = document.getElementById("finish-btn");
+  if (readOnly) {
+    if (entryRow) entryRow.style.display = "none";
+    if (finishBtn) finishBtn.style.display = "none";
+  } else {
+    if (entryRow) entryRow.style.display = "";
+    if (finishBtn) finishBtn.style.display = "";
+  }
+}
+
 function reopenPallet(sscc, message) {
   state.pallet = state.finished[sscc];      // ladda tillbaka sparad data
   normalizePalletExtras(state.pallet);
@@ -317,6 +429,7 @@ function reopenPallet(sscc, message) {
   state.checkStartTime = Date.now();        // återstarta tidmätning
   document.getElementById("sscc-input").value = sscc;
   updateUnfinishButton();
+  setPalletReadOnly(false);
   renderPallet();
   banner("warn", message, true);
   beep("error");
@@ -591,17 +704,51 @@ function scanProduct(raw, amount = 1) {
 }
 
 /* ---------- Rendering ---------- */
+function renderOrderSiblings() {
+  const el = document.getElementById("order-siblings");
+  if (!el) return;
+  const siblings = (state.pallet && state.pallet.orderPallets) || [];
+  if (siblings.length <= 1) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  const orderNo = formatOrderNo(state.pallet.order);
+  const pills = siblings.map(p => {
+    const letter = p.pallet_letter || "A";
+    const status = p.status || (p.port ? "on_port" : "picking");
+    const loc = status === "on_port" ? (p.port || "") : status === "dropped" ? "Plastmaskin" : "Plockas";
+    const current = p.sscc === state.pallet.sscc;
+    const bg = current ? "var(--blue)" : "var(--gray-light)";
+    const color = current ? "#fff" : "var(--text)";
+    return `<button type="button" data-sscc="${p.sscc}" style="border:none; cursor:pointer; background:${bg}; color:${color}; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600;">${letter}-pall · ${loc}</button>`;
+  }).join("");
+  el.classList.remove("hidden");
+  el.innerHTML = `<div style="font-weight:700; margin-bottom:6px;">Ta alla pallar på ${orderNo} (${siblings.length} st) — blanda inte med andra ordrar</div><div style="display:flex; flex-wrap:wrap; gap:6px;">${pills}</div>`;
+  el.querySelectorAll("button[data-sscc]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.getElementById("sscc-input").value = btn.getAttribute("data-sscc");
+      doSearch();
+    });
+  });
+}
+
 function renderPallet() {
   document.getElementById("pallet-area").classList.remove("hidden");
   document.getElementById("pallet-number").textContent = state.pallet.sscc;
-  document.getElementById("pallet-order").textContent = state.pallet.order ? "Order " + state.pallet.order : "";
+  document.getElementById("pallet-order").textContent = state.pallet.order ? formatOrderNo(state.pallet.order) : "";
+  renderOrderSiblings();
   const portBadge = document.getElementById("pallet-port-badge");
   if (portBadge) {
-    const portTxt = state.pallet.port || "Plastmaskin";
-    const isPort = !!state.pallet.port;
+    const palletStatus = state.pallet.status || (state.pallet.port ? "on_port" : "picking");
+    const portTxt = palletStatus === "on_port" ? state.pallet.port
+      : palletStatus === "dropped" ? "Plastmaskin"
+      : "Plockas";
     portBadge.textContent = portTxt;
-    portBadge.style.background = isPort ? "var(--blue-light)" : "#fff3e0";
-    portBadge.style.color = isPort ? "var(--blue)" : "var(--amber)";
+    portBadge.style.background = palletStatus === "on_port" ? "var(--blue-light)"
+      : palletStatus === "dropped" ? "#fff3e0" : "var(--gray-light)";
+    portBadge.style.color = palletStatus === "on_port" ? "var(--blue)"
+      : palletStatus === "dropped" ? "#e65100" : "var(--gray)";
     portBadge.style.display = "inline-block";
   }
   renderFilterBar();
@@ -1029,7 +1176,7 @@ async function finishCheck() {
     : 0;
 
   // Skicka resultatet till servern (i bakgrunden, blockerar ej)
-  saveCheckToServer({
+  const checkPayload = {
     sscc: sscc,
     checkedBy: state.user,
     checkedByUsername: state.checkerUsername || getCheckerUsername(),
@@ -1037,7 +1184,11 @@ async function finishCheck() {
     durationSeconds: durationSeconds,
     lines: state.pallet.lines,
     extras: aggregateUnknownLines(unknownLines)
-  });
+  };
+  if (state.pallet.lastCheckId) {
+    checkPayload.checkId = state.pallet.lastCheckId;
+  }
+  saveCheckToServer(checkPayload);
 
   // Återställ för nästa pall (snabbflöde)
   setTimeout(() => {

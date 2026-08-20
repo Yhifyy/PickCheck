@@ -34,10 +34,15 @@ def static_files(path):
 
 @app.route("/api/pallet/<sscc>", methods=["GET"])
 def get_pallet(sscc):
-    """Hämta en pall med alla produktrader."""
+    """Hämta en pall med alla produktrader + senaste check om den finns."""
     pallet = db.get_pallet(sscc)
     if not pallet:
         return jsonify({"error": "Pall hittades inte", "sscc": sscc}), 404
+
+    latest_check = db.get_latest_check_for_pallet(sscc)
+    if latest_check:
+        pallet["lastCheck"] = latest_check
+
     return jsonify(pallet)
 
 
@@ -53,9 +58,54 @@ def create_pallet():
         order_number=data.get("order"),
         two_pallets=data.get("twoPallets", False),
         lines=data.get("lines", []),
-        port=data.get("port")
+        port=data.get("port"),
+        status=data.get("status"),
+        pallet_letter=data.get("palletLetter") or data.get("pallet_letter")
     )
     return jsonify({"success": True, "sscc": data["sscc"]})
+
+
+@app.route("/api/pallet/<sscc>/status", methods=["PUT"])
+def update_pallet_status(sscc):
+    """Uppdatera pallens status: picking → dropped → on_port."""
+    data = request.get_json()
+    status = data.get("status")
+    if status not in ("picking", "dropped", "on_port"):
+        return jsonify({"error": "Ogiltig status. Använd: picking, dropped, on_port"}), 400
+    port = data.get("port")
+    if status == "on_port" and not port:
+        return jsonify({"error": "Port krävs vid status on_port"}), 400
+    db.update_pallet_status(sscc, status, port)
+    return jsonify({"success": True, "sscc": sscc, "status": status})
+
+
+@app.route("/api/wms/drop", methods=["POST"])
+def wms_drop():
+    """WMS/Vocollect: plockaren har droppat pallen vid plastmaskinen."""
+    data = request.get_json() or {}
+    sscc = (data.get("sscc") or "").strip()
+    if not sscc:
+        return jsonify({"error": "SSCC krävs"}), 400
+    pallet = db.get_pallet(sscc)
+    if not pallet:
+        return jsonify({"error": "Pall hittades inte"}), 404
+    db.update_pallet_status(sscc, "dropped")
+    return jsonify({"success": True, "sscc": sscc, "status": "dropped"})
+
+
+@app.route("/api/wms/scan-port", methods=["POST"])
+def wms_scan_port():
+    """WMS: outbound har skannat pallen och kört ut den till en port."""
+    data = request.get_json() or {}
+    sscc = (data.get("sscc") or "").strip()
+    port = (data.get("port") or "").strip()
+    if not sscc or not port:
+        return jsonify({"error": "SSCC och port krävs"}), 400
+    pallet = db.get_pallet(sscc)
+    if not pallet:
+        return jsonify({"error": "Pall hittades inte"}), 404
+    db.update_pallet_status(sscc, "on_port", port)
+    return jsonify({"success": True, "sscc": sscc, "status": "on_port", "port": port})
 
 
 # ============ API: Kontrollresultat ============

@@ -485,6 +485,7 @@ tr.dim td { color: #a19f9d; }
 .dash-label { font-size: 12px; color: var(--gray); margin-top: 4px; }
 .dash-card.error .dash-value { color: var(--red); }
 .dash-recent { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
+#targets-panel { padding: 12px; }
 .dash-recent h4 { margin: 0 0 12px; font-size: 14px; color: var(--gray); }
 .dash-recent-item {
   display: flex;
@@ -499,6 +500,117 @@ tr.dim td { color: #a19f9d; }
 .dash-recent-item .status { padding: 2px 8px; border-radius: 10px; font-size: 11px; }
 .dash-recent-item .status.ok { background: var(--green-light); color: var(--green); }
 .dash-recent-item .status.error { background: var(--red-light); color: var(--red); }
+
+.check-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.check-head h4 { margin: 0; font-size: 13px; }
+.check-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--green);
+}
+.check-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.check-picker {
+  font-weight: 700;
+  font-size: 13px;
+  margin: 10px 0 6px;
+}
+.check-picker span { font-weight: 500; font-size: 11px; color: var(--gray); }
+.check-order {
+  background: #f7f9fc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin: 0 0 6px;
+}
+.check-order-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.check-order-no { font-weight: 800; font-size: 13px; letter-spacing: 0.2px; }
+.check-order-hint { font-size: 10px; color: var(--gray); }
+.check-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.pall-chip {
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.pall-chip small { font-weight: 500; font-size: 10px; opacity: 0.75; }
+.pall-chip.on_port { background: var(--blue-light); color: var(--blue); }
+.pall-chip.dropped { background: #fff3e0; color: #e65100; }
+.pall-chip.picking { background: var(--gray-light); color: var(--gray); }
+.pall-chip.flash { animation: chip-flash 1.2s ease; }
+@keyframes chip-flash {
+  0% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.8); transform: scale(1.04); }
+  100% { box-shadow: 0 0 0 8px rgba(46, 204, 113, 0); transform: scale(1); }
+}
+
+.btn-view-toggle {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 14px;
+  background: #1a1a2e;
+  color: #ecf0f1;
+  border: 1px solid #34495e;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.btn-view-toggle:hover {
+  background: #2c4a7c;
+  color: #fff;
+  border-color: #4da3ff;
+  box-shadow: 0 0 0 2px rgba(77, 163, 255, 0.45);
+}
+
+.check-text-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 2px 0 0;
+  padding: 3px 4px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  color: inherit;
+}
+.check-text-row:hover { background: var(--blue-light); }
+.check-list-status.on_port { background: var(--blue-light); color: var(--blue); }
+.check-list-status.dropped { background: #fff3e0; color: #e65100; }
+.check-list-status.picking { background: var(--gray-light); color: var(--gray); }
 
 @media (max-width: 700px) {
   .dash-cards { grid-template-columns: repeat(2, 1fr); }
@@ -566,6 +678,12 @@ html.dark-mode,
 .dark-mode .data-table td { border-bottom-color: var(--border); color: var(--text); }
 .dark-mode .hint { color: var(--gray); }
 .dark-mode label { color: var(--gray); }
+.dark-mode .check-order { background: #1a1a2e; }
+.dark-mode .check-text-row:hover { background: #1a3a5c; }
+.dark-mode .pall-chip.dropped,
+.dark-mode .check-list-status.dropped { background: #5c4a1a; color: #ffb74d; }
+.dark-mode .pall-chip.picking,
+.dark-mode .check-list-status.picking { background: #2c3e50; color: #bdc3c7; }
 
 /* Plats- och typ-kolumner */
 .location-cell { font-family: "Consolas", "Courier New", monospace; font-weight: 600; white-space: nowrap; }

@@ -65,6 +65,16 @@ def init_db():
         c.execute("ALTER TABLE pallets ADD COLUMN port TEXT")
     except sqlite3.OperationalError:
         pass
+    # Migrera: lägg till status (picking, dropped, on_port)
+    try:
+        c.execute("ALTER TABLE pallets ADD COLUMN status TEXT DEFAULT 'picking'")
+    except sqlite3.OperationalError:
+        pass
+    # Migrera: pallbokstav (A/B/C/D) — en SSCC = en fysisk pall
+    try:
+        c.execute("ALTER TABLE pallets ADD COLUMN pallet_letter TEXT DEFAULT 'A'")
+    except sqlite3.OperationalError:
+        pass
 
     # Produktrader per pall
     c.execute("""
@@ -310,11 +320,17 @@ def get_pallet(sscc):
     lines = [dict(row) for row in c.fetchall()]
     conn.close()
 
+    pallet_dict = dict(pallet_row)
+    order_number = pallet_row["order_number"]
+    siblings = get_pallets_for_order(order_number) if order_number else []
     return {
         "sscc": pallet_row["sscc"],
-        "order": pallet_row["order_number"],
-        "twoPallets": bool(pallet_row["two_pallets"]),
-        "port": pallet_row["port"] if "port" in dict(pallet_row) else None,
+        "order": order_number,
+        "twoPallets": bool(pallet_row["two_pallets"]) or len(siblings) > 1,
+        "port": pallet_dict.get("port"),
+        "status": pallet_dict.get("status", "picking"),
+        "palletLetter": pallet_dict.get("pallet_letter") or "A",
+        "orderPallets": siblings,
         "lines": [{
             "productNumber": l["product_number"],
             "product": l["product_name"],
@@ -330,15 +346,45 @@ def get_pallet(sscc):
     }
 
 
-def save_pallet(sscc, order_number, two_pallets, lines, port=None):
-    """Spara eller uppdatera en pall med produktrader."""
+def get_pallets_for_order(order_number):
+    """Alla fysiska pallar (SSCC) som tillhör samma ordernummer."""
+    if not order_number:
+        return []
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT sscc, order_number, port, status, pallet_letter
+        FROM pallets
+        WHERE order_number = ?
+        ORDER BY pallet_letter, sscc
+    """, (order_number,))
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def save_pallet(sscc, order_number, two_pallets, lines, port=None, status=None, pallet_letter=None):
+    """Spara eller uppdatera en pall med produktrader.
+    En SSCC = en fysisk pall (A/B/C/D). Samma order_number kan delas av flera SSCC.
+    """
     conn = get_connection()
     c = conn.cursor()
 
+    # Bestäm status automatiskt om inte angiven
+    if status is None:
+        if port:
+            status = "on_port"
+        else:
+            status = "picking"
+
+    if not pallet_letter and lines:
+        pallet_letter = lines[0].get("pallet") or lines[0].get("pallet_letter") or "A"
+    pallet_letter = (pallet_letter or "A").upper()
+
     c.execute("""
-        INSERT OR REPLACE INTO pallets (sscc, order_number, two_pallets, port)
-        VALUES (?, ?, ?, ?)
-    """, (sscc, order_number, 1 if two_pallets else 0, port))
+        INSERT OR REPLACE INTO pallets (sscc, order_number, two_pallets, port, status, pallet_letter)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (sscc, order_number, 1 if two_pallets else 0, port, status, pallet_letter))
 
     c.execute("DELETE FROM pallet_lines WHERE sscc = ?", (sscc,))
 
@@ -361,6 +407,18 @@ def save_pallet(sscc, order_number, two_pallets, lines, port=None):
             line.get("packageType")
         ))
 
+    conn.commit()
+    conn.close()
+
+
+def update_pallet_status(sscc, status, port=None):
+    """Uppdatera pallens status: picking, dropped, on_port."""
+    conn = get_connection()
+    c = conn.cursor()
+    if port:
+        c.execute("UPDATE pallets SET status = ?, port = ? WHERE sscc = ?", (status, port, sscc))
+    else:
+        c.execute("UPDATE pallets SET status = ? WHERE sscc = ?", (status, sscc))
     conn.commit()
     conn.close()
 
@@ -446,43 +504,59 @@ def recalculate_all_check_logs():
 
 def save_check_result(data):
     """
-    Spara ett kontrollresultat.
-    data = {
-        sscc, checkedBy, finishedAt, durationSeconds,
-        lines: [{productNumber, checkedQty, wrongProduct, checkTime, ...}],
-        extras: [{code, count}]
-    }
+    Spara eller uppdatera ett kontrollresultat.
+    Om checkId finns → uppdatera befintlig check istället för att skapa ny.
     """
     conn = get_connection()
     c = conn.cursor()
 
     lines = data.get("lines", [])
     extras = data.get("extras", [])
+    existing_id = data.get("checkId")
 
     total_lines = len(lines)
     checked_lines = sum(1 for l in lines if l.get("checked"))
     wrong_amount, wrong_product, wrong_pallet, extra_count = compute_check_counts(lines, extras)
 
-    c.execute("""
-        INSERT INTO check_logs 
-        (sscc, checked_by, checker_username, finished_at, total_lines, checked_lines,
-         wrong_amount_count, wrong_product_count, wrong_pallet_count, extra_count, duration_seconds)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        data.get("sscc"),
-        data.get("checkedBy"),
-        data.get("checkedByUsername"),
-        data.get("finishedAt", datetime.now().isoformat()),
-        total_lines,
-        checked_lines,
-        wrong_amount,
-        wrong_product,
-        wrong_pallet,
-        extra_count,
-        data.get("durationSeconds", 0)
-    ))
-
-    check_log_id = c.lastrowid
+    if existing_id:
+        # Uppdatera befintlig check
+        c.execute("""
+            UPDATE check_logs SET
+                checked_by = ?, checker_username = ?, finished_at = ?,
+                total_lines = ?, checked_lines = ?,
+                wrong_amount_count = ?, wrong_product_count = ?,
+                wrong_pallet_count = ?, extra_count = ?, duration_seconds = ?
+            WHERE id = ?
+        """, (
+            data.get("checkedBy"),
+            data.get("checkedByUsername"),
+            data.get("finishedAt", datetime.now().isoformat()),
+            total_lines, checked_lines,
+            wrong_amount, wrong_product, wrong_pallet, extra_count,
+            data.get("durationSeconds", 0),
+            existing_id
+        ))
+        check_log_id = existing_id
+        # Ta bort gamla rad-resultat och extras
+        c.execute("DELETE FROM check_line_results WHERE check_log_id = ?", (check_log_id,))
+        c.execute("DELETE FROM check_extras WHERE check_log_id = ?", (check_log_id,))
+    else:
+        # Skapa ny check
+        c.execute("""
+            INSERT INTO check_logs 
+            (sscc, checked_by, checker_username, finished_at, total_lines, checked_lines,
+             wrong_amount_count, wrong_product_count, wrong_pallet_count, extra_count, duration_seconds)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get("sscc"),
+            data.get("checkedBy"),
+            data.get("checkedByUsername"),
+            data.get("finishedAt", datetime.now().isoformat()),
+            total_lines, checked_lines,
+            wrong_amount, wrong_product, wrong_pallet, extra_count,
+            data.get("durationSeconds", 0)
+        ))
+        check_log_id = c.lastrowid
 
     for line in lines:
         c.execute("""
@@ -512,6 +586,39 @@ def save_check_result(data):
     conn.commit()
     conn.close()
     return check_log_id
+
+
+def get_latest_check_for_pallet(sscc):
+    """Hämta senaste kontrollresultat för en specifik pall, inklusive raddata."""
+    conn = get_connection()
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT * FROM check_logs WHERE sscc = ?
+        ORDER BY finished_at DESC LIMIT 1
+    """, (sscc,))
+    log = c.fetchone()
+    if not log:
+        conn.close()
+        return None
+
+    log_dict = dict(log)
+    check_log_id = log_dict["id"]
+
+    c.execute("""
+        SELECT * FROM check_line_results WHERE check_log_id = ?
+    """, (check_log_id,))
+    lines = [dict(r) for r in c.fetchall()]
+
+    c.execute("""
+        SELECT * FROM check_extras WHERE check_log_id = ?
+    """, (check_log_id,))
+    extras = [dict(r) for r in c.fetchall()]
+
+    conn.close()
+    log_dict["lines"] = lines
+    log_dict["extras"] = extras
+    return log_dict
 
 
 def get_check_history(sscc=None, limit=50):
@@ -743,13 +850,24 @@ def set_user_role(username, role):
 ## ---------- Kontrollista ---------- ##
 
 def add_check_target(picker_id, note=None, added_by=None):
-    """Lägg till ett plockare-ID som ska kontrolleras."""
+    """Lägg till ett plockare-ID som ska kontrolleras. Uppdaterar om ID redan finns."""
     conn = get_connection()
     c = conn.cursor()
+    picker_id = picker_id.strip()
     c.execute("""
-        INSERT INTO check_targets (picker_id, note, added_by)
-        VALUES (?, ?, ?)
-    """, (picker_id.strip(), note, added_by))
+        SELECT id FROM check_targets WHERE picker_id = ? AND active = 1 LIMIT 1
+    """, (picker_id,))
+    existing = c.fetchone()
+    if existing:
+        c.execute("""
+            UPDATE check_targets SET note = ?, added_by = ?, added_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (note, added_by, existing["id"]))
+    else:
+        c.execute("""
+            INSERT INTO check_targets (picker_id, note, added_by)
+            VALUES (?, ?, ?)
+        """, (picker_id, note, added_by))
     conn.commit()
     conn.close()
     return True
@@ -790,18 +908,25 @@ def clear_all_targets():
 
 
 def get_pallets_for_picker(picker_id):
-    """Hämta alla pallar som en viss plockare har rader på, inklusive port-info."""
+    """Hämta alla pallar som en viss plockare har rader på, inklusive port- och avgångsinfo."""
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
-        SELECT DISTINCT p.sscc, p.order_number, p.port
+        SELECT DISTINCT p.sscc, p.order_number, p.port, p.status, p.pallet_letter
         FROM pallets p
         JOIN pallet_lines pl ON pl.sscc = p.sscc
         WHERE pl.picker = ?
-        ORDER BY p.created_at DESC
+        ORDER BY p.order_number, p.pallet_letter, p.created_at DESC
     """, (picker_id,))
     rows = [dict(r) for r in c.fetchall()]
     conn.close()
+    for r in rows:
+        if not r.get("status"):
+            r["status"] = "on_port" if r.get("port") else "picking"
+        if not r.get("pallet_letter"):
+            r["pallet_letter"] = "A"
+        sched = PORT_SCHEDULES.get(r.get("port") or "")
+        r["departure_time"] = sched["departure_time"] if sched else None
     return rows
 
 
@@ -817,29 +942,29 @@ def get_targets_with_pallets():
 
 # Automatiska avgångstider per port — kommer från lagersystemet (WMS/IMI)
 PORT_SCHEDULES = {
-    "Port 1":  {"departure_time": "06:30", "note": "Dagligvaror Syd"},
-    "Port 2":  {"departure_time": "07:00", "note": "ICA Maxi"},
-    "Port 3":  {"departure_time": "07:00", "note": "Willys"},
-    "Port 50": {"departure_time": "08:00", "note": "Norrland"},
-    "Port 51": {"departure_time": "08:30", "note": "Småland"},
-    "Port 52": {"departure_time": "08:00", "note": "Norrland"},
-    "Port 53": {"departure_time": "07:30", "note": "Göteborg"},
-    "Port 54": {"departure_time": "09:00", "note": "Stockholm"},
-    "Port 55": {"departure_time": "08:00", "note": "Malmö"},
-    "Port 56": {"departure_time": "09:30", "note": "Sundsvall"},
-    "Port 57": {"departure_time": "07:00", "note": "Örebro"},
-    "Port 58": {"departure_time": "08:30", "note": "Linköping"},
-    "Port 59": {"departure_time": "09:00", "note": "Umeå"},
-    "Port 60": {"departure_time": "07:30", "note": "Uppsala"},
-    "Port 61": {"departure_time": "10:00", "note": "Luleå"},
-    "Port 62": {"departure_time": "08:00", "note": "Västerås"},
-    "Port 63": {"departure_time": "09:00", "note": "Jönköping"},
-    "Port 64": {"departure_time": "07:30", "note": "Karlstad"},
-    "Port 65": {"departure_time": "08:00", "note": "Helsingborg"},
-    "Port 66": {"departure_time": "09:30", "note": "Gävle"},
-    "Port 67": {"departure_time": "08:00", "note": "Borås"},
-    "Port 68": {"departure_time": "10:00", "note": "Kiruna"},
-    "Port 69": {"departure_time": "07:00", "note": "Halmstad"},
+    "Port 1":  {"departure_time": "06:00", "note": ""},
+    "Port 2":  {"departure_time": "06:00", "note": ""},
+    "Port 3":  {"departure_time": "06:00", "note": ""},
+    "Port 50": {"departure_time": "10:00", "note": ""},
+    "Port 51": {"departure_time": "10:00", "note": ""},
+    "Port 52": {"departure_time": "10:00", "note": ""},
+    "Port 53": {"departure_time": "10:00", "note": ""},
+    "Port 54": {"departure_time": "12:00", "note": ""},
+    "Port 55": {"departure_time": "12:00", "note": ""},
+    "Port 56": {"departure_time": "12:00", "note": ""},
+    "Port 57": {"departure_time": "12:00", "note": ""},
+    "Port 58": {"departure_time": "14:00", "note": ""},
+    "Port 59": {"departure_time": "14:00", "note": ""},
+    "Port 60": {"departure_time": "14:00", "note": ""},
+    "Port 61": {"departure_time": "14:00", "note": ""},
+    "Port 62": {"departure_time": "16:00", "note": ""},
+    "Port 63": {"departure_time": "16:00", "note": ""},
+    "Port 64": {"departure_time": "16:00", "note": ""},
+    "Port 65": {"departure_time": "16:00", "note": ""},
+    "Port 66": {"departure_time": "16:00", "note": ""},
+    "Port 67": {"departure_time": "16:00", "note": ""},
+    "Port 68": {"departure_time": "16:00", "note": ""},
+    "Port 69": {"departure_time": "16:00", "note": ""},
 }
 
 
@@ -854,15 +979,15 @@ def get_port_departure(port):
 
 
 def get_pallets_on_ports():
-    """Hämta alla pallar som har en port tilldelad (för morgon-vy)."""
+    """Hämta alla pallar som har status on_port (skannats och körts till port)."""
     conn = get_connection()
     c = conn.cursor()
     c.execute("""
-        SELECT p.sscc, p.order_number, p.port, p.created_at,
+        SELECT p.sscc, p.order_number, p.port, p.created_at, p.pallet_letter,
                GROUP_CONCAT(DISTINCT pl.picker) as pickers
         FROM pallets p
         JOIN pallet_lines pl ON pl.sscc = p.sscc
-        WHERE p.port IS NOT NULL AND p.port != ''
+        WHERE p.port IS NOT NULL AND p.port != '' AND p.status = 'on_port'
         GROUP BY p.sscc
         ORDER BY p.port, p.created_at
     """)

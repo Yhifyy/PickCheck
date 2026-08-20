@@ -7,7 +7,7 @@ import database as db
 PALLETS = [
     {
         "sscc": "173308781029514906",
-        "order": "ORD-99231",
+        "order": "2196231",
         "twoPallets": True,
         "port": "Port 2",
         "lines": [
@@ -31,7 +31,7 @@ PALLETS = [
     },
     {
         "sscc": "173308781029514907",
-        "order": "ORD-99245",
+        "order": "2196245",
         "twoPallets": False,
         "port": "Port 52",
         "lines": [
@@ -44,7 +44,7 @@ PALLETS = [
     },
     {
         "sscc": "173308781029514908",
-        "order": "ORD-99300",
+        "order": "2196300",
         "twoPallets": False,
         "port": "Port 1",
         "lines": [
@@ -56,7 +56,7 @@ PALLETS = [
     {
         # Demo: stor order — A och B fylldes, overflow plockades på C-pall (Vardacco/IMI-scenario)
         "sscc": "173308781029514909",
-        "order": "ORD-99400",
+        "order": "2196400",
         "twoPallets": True,
         "port": None,  # Ej skannad av outbound - vid plastmaskin
         "lines": [
@@ -73,6 +73,54 @@ PALLETS = [
             {"productNumber": "5661929-60322229405", "product": "Batteri CR2032 5p Tear Off Varta", "gtin": "4008496929405", "gtinInner": "4008496929399", "picker": "0312", "pickedQty": 20, "pallet": "C", "correctPallet": "C", "location": "25-60-1C", "packageType": "Innerbox"},
             {"productNumber": "A25PC017", "product": "Easy Bath Glove Kids Unicorn", "gtin": "5701234567890", "gtinInner": "5701234567883", "picker": "0312", "pickedQty": 6, "pallet": "C", "correctPallet": "C", "location": "03-14-1B", "packageType": "Innerbox"},
             {"productNumber": "6617-27479", "product": "Deodorant Rexona Roll-On 50ml Rexona", "gtin": "8710447274798", "gtinInner": "8710447274781", "picker": "0312", "pickedQty": 12, "pallet": "C", "correctPallet": "C", "location": "03-24-1B", "packageType": "Innerbox"},
+        ]
+    },
+    {
+        "sscc": "173308781029514920",
+        "order": "2196411",
+        "twoPallets": True,
+        "palletLetter": "A",
+        "status": "dropped",
+        "port": None,
+        "lines": [
+            {"productNumber": "6617-44832", "product": "TRESemmé Balsam Rich Moisture 685ml x6 (S)", "gtin": "8710447448328", "gtinInner": "8710447448311", "picker": "0312", "pickedQty": 24, "pallet": "A", "correctPallet": "A", "location": "03-12-1A", "packageType": "Ytterbox"},
+            {"productNumber": "6617-46930", "product": "Duschgel Dove 720ml Dove", "gtin": "8710447469308", "gtinInner": "8710447469292", "picker": "0312", "pickedQty": 18, "pallet": "A", "correctPallet": "A", "location": "03-15-1A", "packageType": "Ytterbox"},
+        ]
+    },
+    {
+        "sscc": "173308781029514921",
+        "order": "2196411",
+        "twoPallets": True,
+        "palletLetter": "B",
+        "status": "on_port",
+        "port": "Port 53",
+        "lines": [
+            {"productNumber": "560-71310", "product": "Wettex 10-pack Wettex", "gtin": "7310791713106", "gtinInner": "7310791713090", "picker": "0312", "pickedQty": 36, "pallet": "B", "correctPallet": "B", "location": "20-05-1B", "packageType": "Ytterbox"},
+            {"productNumber": "TK82865", "product": "Tvålkopp Kotikulta Fjord Ljusgrå Kotikulta", "gtin": "6410012345678", "gtinInner": "6410012345661", "picker": "0312", "pickedQty": 12, "pallet": "B", "correctPallet": "B", "location": "15-08-1A", "packageType": "Innerbox"},
+        ]
+    },
+    {
+        "sscc": "173308781029514922",
+        "order": "2196411",
+        "twoPallets": True,
+        "palletLetter": "C",
+        "status": "picking",
+        "port": None,
+        "lines": [
+            {"productNumber": "1041001K", "product": "Råttfälla Betesstation SuperCat SuperCat", "gtin": "4006123456789", "gtinInner": "4006123456772", "picker": "0312", "pickedQty": 10, "pallet": "C", "correctPallet": "C", "location": "15-10-1C", "packageType": "Ytterbox"},
+            {"productNumber": "7155", "product": "Flying Disc with Launcher", "gtin": "5412345678901", "gtinInner": "5412345678895", "picker": "0312", "pickedQty": 12, "pallet": "C", "correctPallet": "C", "location": "12-45-1B", "packageType": "Innerbox"},
+        ]
+    },
+    {
+        "sscc": "173308781029514923",
+        "order": "2196411",
+        "twoPallets": True,
+        "palletLetter": "D",
+        "status": "picking",
+        "port": None,
+        "lines": [
+            {"productNumber": "6617-27479", "product": "Deodorant Rexona Roll-On 50ml Rexona", "gtin": "8710447274798", "gtinInner": "8710447274781", "picker": "0312", "pickedQty": 12, "pallet": "D", "correctPallet": "D", "location": "03-24-1B", "packageType": "Innerbox"},
+            {"productNumber": "A25PC017", "product": "Easy Bath Glove Kids Unicorn", "gtin": "5701234567890", "gtinInner": "5701234567883", "picker": "0312", "pickedQty": 6, "pallet": "D", "correctPallet": "D", "location": "03-14-1B", "packageType": "Innerbox"},
         ]
     }
 ]
@@ -105,7 +153,9 @@ def seed():
             order_number=p["order"],
             two_pallets=p["twoPallets"],
             lines=p["lines"],
-            port=p.get("port")
+            port=p.get("port"),
+            status=p.get("status"),
+            pallet_letter=p.get("palletLetter")
         )
         port_txt = p.get("port") or "Plastmaskin"
         print(f"  - {p['sscc']} ({p['order']}, {len(p['lines'])} rader, {port_txt})")

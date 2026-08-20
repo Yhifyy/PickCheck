@@ -332,8 +332,9 @@
         <tbody>${targets.map(t => {
           const pallInfo = (t.pallets && t.pallets.length > 0)
             ? t.pallets.map(p => {
-                const portTxt = p.port || 'Plastmaskin';
-                return `<span style="display:inline-block; background:var(--blue-light); color:var(--blue); padding:1px 6px; border-radius:8px; font-size:11px; margin:1px 2px;">${portTxt}</span>`;
+                const portTxt = p.port || 'Ej på port än';
+                const letter = p.pallet_letter ? p.pallet_letter + '-pall ' : '';
+                return `<span style="display:inline-block; background:var(--blue-light); color:var(--blue); padding:1px 6px; border-radius:8px; font-size:11px; margin:1px 2px;">${letter}${portTxt}</span>`;
               }).join("")
             : '<span style="color:var(--gray); font-size:11px;">Inga pallar i systemet</span>';
           return `<tr style="border-bottom:1px solid var(--gray-light);">

@@ -15,7 +15,7 @@
 const PALLETS = {
   "173308781029514906": {
     sscc: "173308781029514906",
-    order: "ORD-99231",
+    order: "2196231",
     twoPallets: true, // ordern består av A- och B-pall
     lines: [
       { productNumber: "6617-44832", product: "TRESemmé Balsam Rich Moisture 685ml x6 (S)", picker: "0251", pickedQty: 12, pallet: "A", correctPallet: "A" },
@@ -40,7 +40,7 @@ const PALLETS = {
   },
   "173308781029514907": {
     sscc: "173308781029514907",
-    order: "ORD-99245",
+    order: "2196245",
     twoPallets: false,
     lines: [
       { productNumber: "6617-44832", product: "TRESemmé Balsam Rich Moisture 685ml x6 (S)", picker: "0312", pickedQty: 6,  pallet: "A", correctPallet: "A" },
