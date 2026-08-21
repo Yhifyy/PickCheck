@@ -318,10 +318,22 @@ def get_pallet(sscc):
 
     c.execute("SELECT * FROM pallet_lines WHERE sscc = ? ORDER BY id", (sscc,))
     lines = [dict(row) for row in c.fetchall()]
-    conn.close()
 
     pallet_dict = dict(pallet_row)
     order_number = pallet_row["order_number"]
+    sibling_line_rows = []
+    if order_number:
+        c.execute("""
+            SELECT pl.product_number, pl.product_name, pl.gtin, pl.gtin_inner,
+                   pl.picker, pl.picked_qty, pl.pallet_letter, pl.correct_pallet,
+                   pl.location, pl.package_type, p.sscc
+            FROM pallet_lines pl
+            JOIN pallets p ON p.sscc = pl.sscc
+            WHERE p.order_number = ? AND p.sscc != ?
+        """, (order_number, sscc))
+        sibling_line_rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+
     siblings = get_pallets_for_order(order_number) if order_number else []
     return {
         "sscc": pallet_row["sscc"],
@@ -331,6 +343,19 @@ def get_pallet(sscc):
         "status": pallet_dict.get("status", "picking"),
         "palletLetter": pallet_dict.get("pallet_letter") or "A",
         "orderPallets": siblings,
+        "orderSiblingLines": [{
+            "sscc": l["sscc"],
+            "productNumber": l["product_number"],
+            "product": l["product_name"],
+            "gtin": l.get("gtin"),
+            "gtinInner": l.get("gtin_inner"),
+            "picker": l["picker"],
+            "pickedQty": l["picked_qty"],
+            "pallet": l["pallet_letter"],
+            "correctPallet": l["correct_pallet"],
+            "location": l.get("location"),
+            "packageType": l.get("package_type")
+        } for l in sibling_line_rows],
         "lines": [{
             "productNumber": l["product_number"],
             "product": l["product_name"],
@@ -425,8 +450,20 @@ def update_pallet_status(sscc, status, port=None):
 
 # ============ Check-logg-funktioner ============
 
+def _line_is_misplaced(line):
+    """Fysiskt på fel pall, utan exchange i Vardacco."""
+    if line.get("misplaced"):
+        return True
+    pallet = line.get("pallet", line.get("pallet_letter"))
+    correct = line.get("correctPallet", line.get("correct_pallet"))
+    picked = line.get("pickedQty", line.get("picked_qty", 0)) or 0
+    return bool(correct) and pallet and pallet != correct and picked == 0
+
+
 def _line_is_unknown(line):
-    """Produkt som skannades men inte finns på pallen."""
+    """Produkt som skannades men inte finns på pallen (och inte tillhör syskonpall)."""
+    if _line_is_misplaced(line):
+        return False
     wrong = line.get("wrongProduct") or line.get("wrong_product")
     picked = line.get("pickedQty", line.get("picked_qty", 0))
     return bool(wrong) and (picked or 0) == 0
@@ -440,6 +477,9 @@ def compute_check_counts(lines, extras=None):
     wrong_pallet = 0
 
     for l in lines:
+        if _line_is_misplaced(l):
+            wrong_pallet += 1
+            continue
         if _line_is_unknown(l):
             continue
         checked = l.get("checkedQty", l.get("checked_qty"))
@@ -1003,31 +1043,28 @@ def get_pallets_on_ports():
 
 
 def get_random_available_pallet(exclude_pickers=None):
-    """Hitta en random pall som finns på en port och inte tillhör exkluderade plockare."""
+    """Hitta en random pall på port som inte tillhör exkluderade plockare (kontrollistan)."""
     exclude_pickers = exclude_pickers or []
     conn = get_connection()
     c = conn.cursor()
 
+    base = """
+        SELECT p.sscc, p.order_number, p.port, p.pallet_letter,
+               GROUP_CONCAT(DISTINCT pl.picker) as pickers
+        FROM pallets p
+        JOIN pallet_lines pl ON pl.sscc = p.sscc
+        WHERE p.status = 'on_port' AND p.port IS NOT NULL AND p.port != ''
+    """
     if exclude_pickers:
         placeholders = ",".join("?" * len(exclude_pickers))
-        c.execute(f"""
-            SELECT DISTINCT p.sscc, p.order_number, p.port,
-                   GROUP_CONCAT(DISTINCT pl.picker) as pickers
-            FROM pallets p
-            JOIN pallet_lines pl ON pl.sscc = p.sscc
-            WHERE p.port IS NOT NULL AND p.port != ''
-              AND pl.picker NOT IN ({placeholders})
+        c.execute(base + f"""
             GROUP BY p.sscc
+            HAVING SUM(CASE WHEN pl.picker IN ({placeholders}) THEN 1 ELSE 0 END) = 0
             ORDER BY RANDOM()
             LIMIT 1
         """, exclude_pickers)
     else:
-        c.execute("""
-            SELECT DISTINCT p.sscc, p.order_number, p.port,
-                   GROUP_CONCAT(DISTINCT pl.picker) as pickers
-            FROM pallets p
-            JOIN pallet_lines pl ON pl.sscc = p.sscc
-            WHERE p.port IS NOT NULL AND p.port != ''
+        c.execute(base + """
             GROUP BY p.sscc
             ORDER BY RANDOM()
             LIMIT 1

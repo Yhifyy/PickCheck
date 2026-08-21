@@ -136,7 +136,7 @@
           </div>
           <div class="dash-recent" id="suggestion-panel" style="display:none;">
             <h4>&#128161; Förslag — kontrollera under tiden</h4>
-            <p style="color:var(--gray); font-size:12px; margin:-8px 0 12px;">Inga pallar redo från dina targets. Här är en pall du kan ta under tiden:</p>
+            <p style="color:var(--gray); font-size:12px; margin:-8px 0 12px;">Inga pallar redo från dina ID:n. Systemet väljer ett annat ID som har pall på port:</p>
             <div id="suggestion-dashboard"></div>
           </div>
           <div class="dash-recent">
@@ -512,18 +512,27 @@
         const depTxt = s.departure_time ? `Lastbil kl ${s.departure_time}` : "";
         const noteTxt = s.port_note ? ` (${s.port_note})` : "";
 
+        const letter = s.pallet_letter || "A";
+        const orderNo = String(s.order_number || "").replace(/^ORD-?/i, "");
         container.innerHTML = `
-          <div style="background:var(--blue-light); border-radius:8px; padding:12px 16px;">
+          <button type="button" data-sscc="${s.sscc}" style="display:block; width:100%; text-align:left; border:none; cursor:pointer; background:var(--blue-light); border-radius:8px; padding:12px 16px; color:inherit;">
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-              <span style="font-weight:700; font-size:15px;">ID: ${s.pickers || '—'}</span>
+              <span style="font-weight:700; font-size:15px;">ID: ${s.pickers || "—"}</span>
               <span style="background:#fff; padding:2px 10px; border-radius:10px; font-size:12px; font-weight:600; color:var(--blue);">${portTxt}</span>
               <span style="font-size:12px; color:var(--gray);">${depTxt}${noteTxt}</span>
             </div>
             <div style="margin-top:6px; font-size:12px; color:var(--gray);">
-              SSCC: ${s.sscc} · ${String(s.order_number || '').replace(/^ORD-?/i, '')}
+              ${letter}-pall · ${orderNo} order · …${String(s.sscc).slice(-6)} SSCC
             </div>
-          </div>
+          </button>
         `;
+        const suggestBtn = container.querySelector("[data-sscc]");
+        if (suggestBtn) {
+          suggestBtn.addEventListener("click", () => {
+            document.getElementById("sscc-input").value = s.sscc;
+            document.getElementById("search-btn").click();
+          });
+        }
       } catch { panel.style.display = "none"; }
     }
 

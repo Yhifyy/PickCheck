@@ -319,7 +319,9 @@ async function doSearch() {
         extras: [],
         finishedAt: check.finished_at,
         lastCheckId: check.id,
+        palletLetter: src.palletLetter || "A",
         orderPallets: src.orderPallets || [],
+        orderSiblingLines: src.orderSiblingLines || [],
         lines: src.lines.map((l) => {
           const match = checkLines.find(cl => cl.product_number === l.productNumber);
           if (match) {
@@ -347,6 +349,27 @@ async function doSearch() {
           checkTime: check.finished_at
         });
       });
+      const pickNumbers = new Set(src.lines.map((l) => l.productNumber));
+      checkLines.forEach((cl) => {
+        if (pickNumbers.has(cl.product_number)) return;
+        if (!cl.correct_pallet || !cl.pallet_letter || cl.correct_pallet === cl.pallet_letter) return;
+        state.pallet.lines.push({
+          productNumber: cl.product_number,
+          product: cl.product_name,
+          gtin: "", gtinInner: "",
+          picker: cl.picker || "—",
+          pickedQty: 0,
+          pallet: cl.pallet_letter,
+          correctPallet: cl.correct_pallet,
+          location: "", packageType: "",
+          checkedQty: cl.checked_qty,
+          checked: true,
+          wrongProduct: false,
+          notOnPallet: true,
+          misplaced: true,
+          checkTime: cl.check_time || check.finished_at
+        });
+      });
 
       // Spara i finished-state så Ångra-knappen fungerar
       state.finished[sscc] = state.pallet;
@@ -371,7 +394,9 @@ async function doSearch() {
       port: src.port || null,
       status: src.status || "picking",
       extras: [],
+      palletLetter: src.palletLetter || "A",
       orderPallets: src.orderPallets || [],
+      orderSiblingLines: src.orderSiblingLines || [],
       lines: src.lines.map((l) => ({
         ...l,
         checkedQty: null,
@@ -566,6 +591,23 @@ function markLineWrongProduct(index, scannedCode, matchedIdx) {
   return false;
 }
 
+function findSiblingLine(code) {
+  const siblings = (state.pallet && state.pallet.orderSiblingLines) || [];
+  return siblings.find((l) => lineMatchesCode(l, code)) || null;
+}
+
+function currentPalletLetter() {
+  if (!state.pallet) return "A";
+  if (state.pallet.palletLetter) return state.pallet.palletLetter;
+  const listed = state.pallet.lines.find((l) => !l.notOnPallet && l.pallet);
+  return listed ? listed.pallet : "A";
+}
+
+function misplacedBanner(line, n) {
+  const typ = line.packageType || "st";
+  return `FEL PALL: ${line.product} ligger här (${line.pallet}) men ska på ${line.correctPallet}-pallen — ingen exchange i Vardacco. Flytta ${n} ${typ}.`;
+}
+
 function applyScanToLine(idx, amount) {
   const line = state.pallet.lines[idx];
 
@@ -599,8 +641,10 @@ function applyScanToLine(idx, amount) {
   if (amount < 0) {
     banner("ok", `Korrigerat: ${line.product} – nu ${n}/${m}`, false);
     beep("ok");
-  } else if (isWrongPallet(line)) {
-    banner("error", `FEL PALL: ${line.product} ligger på ${line.pallet} men ska på ${line.correctPallet} (räknat ${n}) — Plats: ${loc}`, true);
+  } else if (line.misplaced || isWrongPallet(line)) {
+    banner("error", line.misplaced
+      ? misplacedBanner(line, n)
+      : `FEL PALL: ${line.product} ligger på ${line.pallet} men ska på ${line.correctPallet} (räknat ${n}) — Plats: ${loc}`, true);
     beep("error");
   } else if (n > m) {
     const extra = n - m;
@@ -630,6 +674,7 @@ function applyUnknownProductScan(code, amount) {
 
   const lines = state.pallet.lines;
   let idx = lines.findIndex((l) => l.notOnPallet && lineMatchesCode(l, code));
+  const sibling = idx < 0 ? findSiblingLine(code) : null;
 
   if (idx >= 0) {
     const line = lines[idx];
@@ -641,6 +686,29 @@ function applyUnknownProductScan(code, amount) {
       lines.push(line);
       idx = lines.length - 1;
     }
+  } else if (sibling) {
+    const here = currentPalletLetter();
+    const should = sibling.pallet || sibling.correctPallet || "?";
+    lines.push({
+      productNumber: sibling.productNumber,
+      product: sibling.product,
+      gtin: sibling.gtin || "",
+      gtinInner: sibling.gtinInner || "",
+      picker: sibling.picker || "—",
+      pickedQty: 0,
+      pallet: here,
+      correctPallet: should,
+      location: sibling.location || "",
+      packageType: sibling.packageType || "",
+      checkedQty: Math.max(0, amount),
+      checked: amount > 0,
+      wrongProduct: false,
+      notOnPallet: true,
+      misplaced: true,
+      belongsToSscc: sibling.sscc,
+      checkTime: amount > 0 ? new Date().toLocaleDateString("sv-SE") : ""
+    });
+    idx = lines.length - 1;
   } else {
     lines.push({
       productNumber: code,
@@ -670,8 +738,11 @@ function applyUnknownProductScan(code, amount) {
   scrollToRow(idx, "end");
 
   const line = lines[idx];
-  banner("error",
-    `Ska inte finnas med på pall: ${code} (räknat ${line.checkedQty})`, true);
+  if (line.misplaced) {
+    banner("error", misplacedBanner(line, line.checkedQty), true);
+  } else {
+    banner("error", `Ska inte finnas med på pall: ${code} (räknat ${line.checkedQty})`, true);
+  }
   beep("error");
   refocusScan();
   return false;
@@ -817,7 +888,8 @@ function renderLines() {
 
     // Status-ikon
     let statusIcon = "";
-    if (isUnknown) statusIcon = '<span class="status-error" title="Finns ej på pallen">\u2716</span>';
+    if (line.misplaced) statusIcon = '<span class="status-error" title="Fel pall utan exchange">\u21C4</span>';
+    else if (isUnknown) statusIcon = '<span class="status-error" title="Finns ej på pallen">\u2716</span>';
     else if (line.wrongProduct) statusIcon = '<span class="status-error" title="Fel produkt">\u2716</span>';
     else if (wrongPallet) statusIcon = '<span class="status-error" title="Fel pall">\u21C4</span>';
     else if (line.checked) {
@@ -828,7 +900,11 @@ function renderLines() {
     // Pall-cell: vid fel pall visas "plockad → ska", annars bara pallen
     let palletPill = "";
     if (showPallet) {
-      if (isUnknown) {
+      if (line.misplaced) {
+        palletPill = `<span class="pill pill-${line.pallet}">${line.pallet}</span>` +
+          ` <span class="pallet-arrow">\u2192</span> ` +
+          `<span class="pill pill-${line.correctPallet}">${line.correctPallet}</span>`;
+      } else if (isUnknown) {
         palletPill = '<span class="unknown-pallet-badge">EJ PÅ PALLEN</span>';
       } else if (wrongPallet) {
         palletPill = `<span class="pill pill-${line.pallet}">${line.pallet}</span>` +
@@ -845,15 +921,18 @@ function renderLines() {
     const isExtra = !isUnknown && hasChecked && line.checkedQty > line.pickedQty;
     const extraBadge = isExtra
       ? `<span class="qty-extra">+${line.checkedQty - line.pickedQty} extra</span>`
-      : (isUnknown && hasChecked ? '<span class="qty-extra">fel produkt</span>' : "");
+      : (line.misplaced && hasChecked ? '<span class="qty-extra">ingen exchange</span>'
+        : (isUnknown && hasChecked ? '<span class="qty-extra">fel produkt</span>' : ""));
 
-    const productCell = isUnknown
-      ? `<span class="unknown-product-label">${line.product}</span>`
-      : line.product;
-    const pickedCell = isUnknown ? "—" : line.pickedQty;
+    const productCell = line.misplaced
+      ? line.product
+      : (isUnknown
+        ? `<span class="unknown-product-label">${line.product}</span>`
+        : line.product);
+    const pickedCell = (isUnknown && !line.misplaced) ? "—" : line.pickedQty;
 
-    const locationCell = isUnknown ? "—" : (line.location || "—");
-    const typeCell = isUnknown ? "—" : (line.packageType || "—");
+    const locationCell = (isUnknown && !line.misplaced) ? "—" : (line.location || "—");
+    const typeCell = (isUnknown && !line.misplaced) ? "—" : (line.packageType || "—");
 
     tr.innerHTML = `
       <td class="status-cell">${statusIcon}</td>
@@ -1105,8 +1184,12 @@ function updateStats() {
   const lines = state.pallet.lines;
   const wrongAmount = lines.filter(isWrongAmount);
   const wrongProduct = lines.filter((l) => l.wrongProduct && !l.notOnPallet);
-  const wrongPallet = lines.filter(isWrongPallet);
-  const unknownLines = lines.filter((l) => l.notOnPallet);
+  const registeredWrongPallet = lines.filter((l) => isWrongPallet(l) && !l.misplaced && !l.notOnPallet);
+  const misplacedLines = lines.filter((l) => l.misplaced);
+  const unknownLines = lines.filter((l) => l.notOnPallet && !l.misplaced);
+  const siblingLetters = [...new Set(
+    ((state.pallet.orderSiblingLines || []).map((l) => l.pallet).filter(Boolean))
+  )].join("/");
 
   let html = "";
   html += statsGroup("Fel antal", wrongAmount.map((l) => {
@@ -1117,17 +1200,23 @@ function updateStats() {
       return `${l.productNumber} ${l.product} — <strong>${extra} ${typ} för mycket → Lämna tillbaka till plats ${loc}</strong>`;
     } else {
       const missing = l.pickedQty - l.checkedQty;
-      return `${l.productNumber} ${l.product} — <strong>${missing} ${typ} saknas → Hämta från plats ${loc}</strong>`;
+      let hint = `${missing} ${typ} saknas → Hämta från plats ${loc}`;
+      if (siblingLetters) {
+        hint += ` (kolla även ${siblingLetters}-pallen — kan ha lagts fel utan exchange)`;
+      }
+      return `${l.productNumber} ${l.product} — <strong>${hint}</strong>`;
     }
   }));
   html += statsGroup("Fel produkt", wrongProduct.map(
     (l) => `${l.productNumber} ${l.product}` + (state.pallet.twoPallets ? ` <span class="pill pill-${l.pallet}">${l.pallet}</span>` : "")));
-  html += statsGroup("Fel pall", wrongPallet.map(
+  html += statsGroup("Fel pall (exchange i Vardacco)", registeredWrongPallet.map(
     (l) => `${l.productNumber} ${l.product} <strong>(ligger på <span class="pill pill-${l.pallet}">${l.pallet}</span> \u2192 ska på <span class="pill pill-${l.correctPallet}">${l.correctPallet}</span>) — Plats: ${l.location || "okänd"}</strong>`));
+  html += statsGroup("Fel pall (ingen exchange)", misplacedLines.map(
+    (l) => `${l.productNumber} ${l.product} <strong>ligger på <span class="pill pill-${l.pallet}">${l.pallet}</span> men ska till <span class="pill pill-${l.correctPallet}">${l.correctPallet}</span>-pallen — flytta ${l.checkedQty || 0} ${(l.packageType || "st")}</strong>`));
   html += statsGroup("Ska inte finnas med på pall", unknownLines.map(
     (l) => `${l.productNumber} <strong>Ska inte finnas med på pall</strong> (räknat ${l.checkedQty}) — Lämna tillbaka`));
 
-  if (!wrongAmount.length && !wrongProduct.length && !wrongPallet.length && !unknownLines.length) {
+  if (!wrongAmount.length && !wrongProduct.length && !registeredWrongPallet.length && !misplacedLines.length && !unknownLines.length) {
     html = '<div class="stats-empty">\u2714 Inga avvikelser</div>' + html;
   }
   document.getElementById("stats-content").innerHTML = html;
@@ -1148,7 +1237,7 @@ async function finishCheck() {
   // Finish Check går ALLTID igenom. Avvikelser (fel pall, fel antal, extra)
   // blockerar inte – de skickas vidare så ledarna ser dem i IMI.
   const errors = state.pallet.lines.filter(lineHasError);
-  const unknownLines = state.pallet.lines.filter((l) => l.notOnPallet);
+  const unknownLines = state.pallet.lines.filter((l) => l.notOnPallet && !l.misplaced);
   const unchecked = state.pallet.lines.filter((l) => !l.notOnPallet && !l.checked).length;
   const totalErrors = errors.length;
 

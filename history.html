@@ -251,7 +251,6 @@
       const extraPieces = extras.reduce((sum, e) => sum + (e.scan_count || 0), 0);
 
       const date = new Date(log.finished_at).toLocaleString('sv-SE');
-      const duration = log.duration_seconds ? `${Math.round(log.duration_seconds)} sekunder` : '-';
       const totalErrors = (log.wrong_amount_count || 0) + (log.wrong_product_count || 0)
         + (log.wrong_pallet_count || 0) + (log.extra_count || 0);
 
@@ -268,10 +267,6 @@
           <div class="detail-item">
             <label>Datum</label>
             <value>${date}</value>
-          </div>
-          <div class="detail-item">
-            <label>Kontrolltid</label>
-            <value>${duration}</value>
           </div>
           <div class="detail-item">
             <label>Rader</label>
