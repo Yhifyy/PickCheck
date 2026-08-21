@@ -283,10 +283,14 @@ def get_picker_stats(picker):
     """, (picker, f"-{days} days"))
 
     per_day = [dict(r) for r in c.fetchall()]
+
+    c.execute("SELECT name FROM pickers WHERE picker_id = ?", (picker,))
+    name_row = c.fetchone()
     conn.close()
 
     return jsonify({
         "picker": picker,
+        "picker_name": name_row["name"] if name_row else None,
         "products": products,
         "perDay": per_day
     })
@@ -305,6 +309,7 @@ def get_pickers_ranking():
     c.execute("""
         SELECT 
             r.picker,
+            pk.name as picker_name,
             COUNT(*) as total_lines,
             SUM(CASE WHEN r.checked_qty IS NOT NULL THEN 1 ELSE 0 END) as checked_lines,
             SUM(CASE WHEN r.checked_qty != r.picked_qty AND r.wrong_product = 0 THEN 1 ELSE 0 END) as wrong_amount,
@@ -314,9 +319,10 @@ def get_pickers_ranking():
             COUNT(DISTINCT l.sscc) as unique_pallets
         FROM check_line_results r
         JOIN check_logs l ON r.check_log_id = l.id
+        LEFT JOIN pickers pk ON pk.picker_id = r.picker
         WHERE l.finished_at >= datetime('now', ?)
         AND r.picker IS NOT NULL AND r.picker != ''
-        GROUP BY r.picker
+        GROUP BY r.picker, pk.name
         ORDER BY (wrong_amount + wrong_product + wrong_pallet) DESC
     """, (f"-{days} days",))
     

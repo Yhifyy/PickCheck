@@ -28,6 +28,7 @@
     .data-table tr:hover td { background: var(--blue-light); }
     .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
     .data-table .error-cell { color: var(--red); font-weight: 600; }
+    .picker-id { color: var(--gray); font-size: 12px; font-weight: 400; margin-top: 2px; }
     
     .filter-row { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
     .filter-row label { font-size: 14px; color: var(--gray); }
@@ -184,9 +185,14 @@
           <tbody>
             ${pickers.map(p => {
               const total = (p.wrong_amount || 0) + (p.wrong_product || 0) + (p.wrong_pallet || 0);
+              const id = p.picker || "(okänd)";
+              const name = p.picker_name;
+              const label = name
+                ? `<strong>${name}</strong><div class="picker-id">${id}</div>`
+                : `<strong>${id}</strong>`;
               return `
                 <tr>
-                  <td><strong>${p.picker || "(okänd)"}</strong></td>
+                  <td>${label}</td>
                   <td class="num">${p.total_lines}</td>
                   <td class="num ${p.wrong_amount > 0 ? 'error-cell' : ''}">${p.wrong_amount || 0}</td>
                   <td class="num ${p.wrong_product > 0 ? 'error-cell' : ''}">${p.wrong_product || 0}</td>

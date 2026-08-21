@@ -632,6 +632,11 @@
     loadTargets();
     loadPortsPallets();
     scheduleDashboardRefresh();
+    window.refreshPickcheckDashboard = function () {
+      loadDashboard();
+      loadTargets();
+      loadPortsPallets();
+    };
 
     document.getElementById("targets-view-toggle").addEventListener("click", () => {
       targetsOldView = !targetsOldView;

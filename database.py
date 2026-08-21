@@ -168,6 +168,14 @@ def init_db():
     """)
     c.execute("CREATE INDEX IF NOT EXISTS idx_targets_active ON check_targets(active)")
 
+    # Plockare — ID + namn (visas i statistik m.m.)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS pickers (
+            picker_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL
+        )
+    """)
+
     # Avgångstider per port (när lastbilen går)
     c.execute("""
         CREATE TABLE IF NOT EXISTS port_schedules (
@@ -182,6 +190,27 @@ def init_db():
     recalculate_all_check_logs()
     backfill_checker_usernames()
     normalize_display_names()
+    seed_picker_names()
+
+
+DEFAULT_PICKER_NAMES = {
+    "0251": "Lisa Berg",
+    "0312": "Johan Lindqvist",
+    "0415": "Sara Holm",
+}
+
+
+def seed_picker_names():
+    """Lägg in demnamn för kända plockare-ID:n utan att skriva över befintliga."""
+    conn = get_connection()
+    c = conn.cursor()
+    for picker_id, name in DEFAULT_PICKER_NAMES.items():
+        c.execute(
+            "INSERT OR IGNORE INTO pickers (picker_id, name) VALUES (?, ?)",
+            (picker_id, name),
+        )
+    conn.commit()
+    conn.close()
 
 
 def backfill_checker_usernames():
@@ -282,10 +311,15 @@ def get_dashboard_data():
     week = dict(c.fetchone())
 
     c.execute(f"""
-        SELECT id, sscc, checked_by, finished_at, total_lines, checked_lines,
+        SELECT c.id, c.sscc, c.checked_by, c.finished_at, c.total_lines, c.checked_lines,
                {ERRORS_SUM} as total_errors
-        FROM check_logs
-        ORDER BY finished_at DESC
+        FROM check_logs c
+        INNER JOIN (
+            SELECT sscc, MAX(finished_at) as max_ft
+            FROM check_logs
+            GROUP BY sscc
+        ) latest ON latest.sscc = c.sscc AND latest.max_ft = c.finished_at
+        ORDER BY c.finished_at DESC
         LIMIT 5
     """)
     recent = [dict(r) for r in c.fetchall()]
@@ -469,8 +503,18 @@ def _line_is_unknown(line):
     return bool(wrong) and (picked or 0) == 0
 
 
+def _line_was_checked(line):
+    """True om kontrollanten fyllt i/skannat raden."""
+    if line.get("checked") is False:
+        return False
+    if line.get("checked") is True:
+        return True
+    qty = line.get("checkedQty", line.get("checked_qty"))
+    return qty is not None
+
+
 def compute_check_counts(lines, extras=None):
-    """Räkna avvikelser konsekvent (undvik dubbelräkning av okända produkter)."""
+    """Räkna avvikelser: en rad = ett fel. Ej ifyllda rader räknas som fel antal."""
     extras = extras or []
     wrong_amount = 0
     wrong_product = 0
@@ -482,19 +526,17 @@ def compute_check_counts(lines, extras=None):
             continue
         if _line_is_unknown(l):
             continue
+        if not _line_was_checked(l):
+            wrong_amount += 1
+            continue
         checked = l.get("checkedQty", l.get("checked_qty"))
         picked = l.get("pickedQty", l.get("picked_qty"))
         wrong_p = l.get("wrongProduct") or l.get("wrong_product")
-        pallet = l.get("pallet", l.get("pallet_letter"))
-        correct = l.get("correctPallet", l.get("correct_pallet"))
-        is_checked = l.get("checked", True)
 
-        if is_checked and not wrong_p and checked is not None and checked != picked:
-            wrong_amount += 1
         if wrong_p:
             wrong_product += 1
-        if correct and pallet != correct:
-            wrong_pallet += 1
+        elif checked is not None and checked != picked:
+            wrong_amount += 1
 
     extra_codes = set()
     for e in extras:
@@ -553,6 +595,16 @@ def save_check_result(data):
     lines = data.get("lines", [])
     extras = data.get("extras", [])
     existing_id = data.get("checkId")
+    sscc = data.get("sscc")
+
+    if not existing_id and sscc:
+        c.execute("""
+            SELECT id FROM check_logs WHERE sscc = ?
+            ORDER BY finished_at DESC LIMIT 1
+        """, (sscc,))
+        row = c.fetchone()
+        if row:
+            existing_id = row["id"]
 
     total_lines = len(lines)
     checked_lines = sum(1 for l in lines if l.get("checked"))
@@ -622,6 +674,14 @@ def save_check_result(data):
             INSERT INTO check_extras (check_log_id, product_code, scan_count)
             VALUES (?, ?, ?)
         """, (check_log_id, extra.get("code"), extra.get("count", 1)))
+
+    if sscc:
+        c.execute("SELECT id FROM check_logs WHERE sscc = ? AND id != ?", (sscc, check_log_id))
+        old_ids = [r["id"] for r in c.fetchall()]
+        for oid in old_ids:
+            c.execute("DELETE FROM check_line_results WHERE check_log_id = ?", (oid,))
+            c.execute("DELETE FROM check_extras WHERE check_log_id = ?", (oid,))
+            c.execute("DELETE FROM check_logs WHERE id = ?", (oid,))
 
     conn.commit()
     conn.close()
@@ -722,14 +782,16 @@ def get_statistics(days=30):
     c.execute("""
         SELECT 
             r.picker,
+            pk.name as picker_name,
             COUNT(*) as total_lines,
             SUM(CASE WHEN r.checked_qty != r.picked_qty AND r.wrong_product = 0 THEN 1 ELSE 0 END) as wrong_amount,
             SUM(r.wrong_product) as wrong_product,
             SUM(CASE WHEN r.pallet_letter != r.correct_pallet AND r.correct_pallet IS NOT NULL THEN 1 ELSE 0 END) as wrong_pallet
         FROM check_line_results r
         JOIN check_logs l ON r.check_log_id = l.id
+        LEFT JOIN pickers pk ON pk.picker_id = r.picker
         WHERE l.finished_at >= datetime('now', ?)
-        GROUP BY r.picker
+        GROUP BY r.picker, pk.name
         ORDER BY (wrong_amount + wrong_product + wrong_pallet) DESC
         LIMIT 20
     """, (f"-{days} days",))

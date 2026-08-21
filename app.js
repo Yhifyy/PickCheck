@@ -65,6 +65,41 @@ function formatOrderNo(order) {
   return String(order).replace(/^ORD-?/i, "");
 }
 
+function siblingPickLines(src) {
+  const have = new Set((src.lines || []).map((l) => `${l.productNumber}|${l.pallet}`));
+  return (src.orderSiblingLines || [])
+    .filter((l) => l.productNumber && !have.has(`${l.productNumber}|${l.pallet}`))
+    .map((l) => ({
+      productNumber: l.productNumber,
+      product: l.product,
+      gtin: l.gtin || "",
+      gtinInner: l.gtinInner || "",
+      picker: l.picker || "—",
+      pickedQty: l.pickedQty,
+      pallet: l.pallet,
+      correctPallet: l.correctPallet || l.pallet,
+      location: l.location || "",
+      packageType: l.packageType || "",
+      sourceSscc: l.sscc,
+      checkedQty: null,
+      checked: false,
+      wrongProduct: false,
+      checkTime: ""
+    }));
+}
+
+function orderPalletLetters() {
+  if (!state.pallet) return [];
+  const letters = [];
+  (state.pallet.orderPallets || []).forEach((p) => {
+    if (p.pallet_letter) letters.push(p.pallet_letter);
+  });
+  (state.pallet.lines || []).forEach((l) => {
+    if (!l.notOnPallet && l.pallet && l.pallet !== "—") letters.push(l.pallet);
+  });
+  return [...new Set(letters)].sort();
+}
+
 /* ---------- Banner ---------- */
 let bannerTimer = null;
 function banner(type, msg, sticky) {
@@ -256,6 +291,14 @@ document.getElementById("sscc-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); doSearch(); }
 });
 
+function setDashboardVisible(visible) {
+  const el = document.getElementById("dashboard");
+  if (el) el.classList.toggle("hidden", !visible);
+  if (visible && typeof window.refreshPickcheckDashboard === "function") {
+    window.refreshPickcheckDashboard();
+  }
+}
+
 function clearPalletView() {
   document.getElementById("pallet-area").classList.add("hidden");
   const siblings = document.getElementById("order-siblings");
@@ -271,6 +314,7 @@ function clearPalletView() {
   state.checkStartTime = null;
   setPalletReadOnly(false);
   hideBanner();
+  setDashboardVisible(true);
   focusSscc();
 }
 
@@ -334,7 +378,7 @@ async function doSearch() {
             };
           }
           return { ...l, checkedQty: null, checked: false, wrongProduct: false, checkTime: "" };
-        })
+        }).concat(siblingPickLines(src))
       };
       // Lägg till extras (okända produkter)
       const extras = check.extras || [];
@@ -403,7 +447,7 @@ async function doSearch() {
         checked: false,
         wrongProduct: false,
         checkTime: ""
-      }))
+      })).concat(siblingPickLines(src))
     };
     hideBanner();
     setPalletReadOnly(false);
@@ -443,41 +487,60 @@ function setPalletReadOnly(readOnly) {
   }
 }
 
+function resetCheckProgress(pallet) {
+  if (!pallet || !pallet.lines) return;
+  pallet.lines = pallet.lines.filter((l) => !l.notOnPallet);
+  pallet.lines.forEach((l) => {
+    l.checkedQty = null;
+    l.checked = false;
+    l.wrongProduct = false;
+    l.checkTime = "";
+    delete l.misplaced;
+    delete l.belongsToSscc;
+  });
+  pallet.extras = [];
+  pallet.finishedAt = null;
+}
+
 function reopenPallet(sscc, message) {
-  state.pallet = state.finished[sscc];      // ladda tillbaka sparad data
+  state.pallet = state.finished[sscc];
   normalizePalletExtras(state.pallet);
-  delete state.finished[sscc];              // pallen är nu aktiv/öppen igen
+  resetCheckProgress(state.pallet);
+  delete state.finished[sscc];
   if (state.lastFinishedSscc === sscc) state.lastFinishedSscc = null;
   state.sscc = sscc;
   state.filter = "ALL";
   state.activeIndex = -1;
-  state.checkStartTime = Date.now();        // återstarta tidmätning
+  state.checkStartTime = Date.now();
   document.getElementById("sscc-input").value = sscc;
   updateUnfinishButton();
   setPalletReadOnly(false);
   renderPallet();
   banner("warn", message, true);
   beep("error");
-  // Hoppa till första avvikelsen om någon finns, annars första raden
-  const firstErr = state.pallet.lines.findIndex(lineHasError);
-  setTimeout(() => focusLine(firstErr >= 0 ? firstErr : firstVisibleIndex()), 0);
+  refocusScan();
 }
 
 /* ---------- Avvikelse-hjälpare ---------- */
+/* Registrerad flytt i Vardacco (samma order/butik/stad) — info, inte fel */
+function isRegisteredMove(line) {
+  return !line.notOnPallet && !line.misplaced
+    && line.correctPallet && line.correctPallet !== line.pallet;
+}
 function isWrongPallet(line) {
-  return line.correctPallet && line.correctPallet !== line.pallet;
+  return !!line.misplaced;
 }
 function isWrongAmount(line) {
   return line.checked && !line.notOnPallet && !line.wrongProduct && line.checkedQty !== line.pickedQty;
 }
 function isQtyMatch(line) {
-  return line.checked && line.checkedQty === line.pickedQty && !line.wrongProduct && !isWrongPallet(line);
+  return line.checked && line.checkedQty === line.pickedQty && !line.wrongProduct && !line.misplaced;
 }
 function getCheckedQtyClass(line) {
   if (!line.checked || line.checkedQty === null || line.checkedQty === "") return "";
   if (line.wrongProduct) return "qty-mismatch";
   if (line.checkedQty > line.pickedQty) return "qty-mismatch";
-  if (line.checkedQty === line.pickedQty && !isWrongPallet(line)) return "qty-match";
+  if (line.checkedQty === line.pickedQty && !line.misplaced) return "qty-match";
   if (line.checkedQty < line.pickedQty) return "qty-mismatch";
   return "";
 }
@@ -597,6 +660,7 @@ function findSiblingLine(code) {
 }
 
 function currentPalletLetter() {
+  if (state.filter && state.filter !== "ALL") return state.filter;
   if (!state.pallet) return "A";
   if (state.pallet.palletLetter) return state.pallet.palletLetter;
   const listed = state.pallet.lines.find((l) => !l.notOnPallet && l.pallet);
@@ -610,11 +674,6 @@ function misplacedBanner(line, n) {
 
 function applyScanToLine(idx, amount) {
   const line = state.pallet.lines[idx];
-
-  if (state.filter !== "ALL" && line.pallet !== state.filter) {
-    state.filter = "ALL";
-    renderFilterBar();
-  }
 
   // Rätt streckkod skannad → produkten stämmer, rensa ev. fel-produkt-markering
   line.wrongProduct = false;
@@ -634,17 +693,15 @@ function applyScanToLine(idx, amount) {
   highlightActive();
 
   const n = line.checkedQty, m = line.pickedQty;
-  const isCorrect = (n === m) && !isWrongPallet(line);
+  const isCorrect = (n === m) && !line.misplaced;
   const loc = line.location || "okänd plats";
   const typ = line.packageType || "st";
 
   if (amount < 0) {
     banner("ok", `Korrigerat: ${line.product} – nu ${n}/${m}`, false);
     beep("ok");
-  } else if (line.misplaced || isWrongPallet(line)) {
-    banner("error", line.misplaced
-      ? misplacedBanner(line, n)
-      : `FEL PALL: ${line.product} ligger på ${line.pallet} men ska på ${line.correctPallet} (räknat ${n}) — Plats: ${loc}`, true);
+  } else if (line.misplaced) {
+    banner("error", misplacedBanner(line, n), true);
     beep("error");
   } else if (n > m) {
     const extra = n - m;
@@ -667,11 +724,6 @@ function applyScanToLine(idx, amount) {
 }
 
 function applyUnknownProductScan(code, amount) {
-  if (state.filter !== "ALL") {
-    state.filter = "ALL";
-    renderFilterBar();
-  }
-
   const lines = state.pallet.lines;
   let idx = lines.findIndex((l) => l.notOnPallet && lineMatchesCode(l, code));
   const sibling = idx < 0 ? findSiblingLine(code) : null;
@@ -767,11 +819,80 @@ function scanProduct(raw, amount = 1) {
     return applyScanToLine(activeIdx, amount);
   }
 
+  const filter = state.filter;
+  if (filter && filter !== "ALL") {
+    const onThisPallet = state.pallet.lines.findIndex((l) =>
+      !l.notOnPallet && l.pallet === filter && lineMatchesCode(l, code)
+    );
+    if (onThisPallet >= 0) return applyScanToLine(onThisPallet, amount);
+
+    const extraHere = state.pallet.lines.findIndex((l) =>
+      l.notOnPallet && lineMatchesCode(l, code) && (l.pallet === filter || l.pallet === "—" || !l.pallet)
+    );
+    if (extraHere >= 0) return applyUnknownProductScan(code, amount);
+
+    const onOtherPallet = state.pallet.lines.findIndex((l) =>
+      !l.notOnPallet && l.pallet !== filter && lineMatchesCode(l, code)
+    );
+    if (onOtherPallet >= 0) {
+      return applyMisplacedFromListedLine(state.pallet.lines[onOtherPallet], amount);
+    }
+    return applyUnknownProductScan(code, amount);
+  }
+
   if (idx === -1) {
     return applyUnknownProductScan(code, amount);
   }
 
   return applyScanToLine(idx, amount);
+}
+
+function applyMisplacedFromListedLine(sourceLine, amount) {
+  const here = currentPalletLetter();
+  const should = sourceLine.pallet || sourceLine.correctPallet || "?";
+  const lines = state.pallet.lines;
+  let idx = lines.findIndex((l) =>
+    l.misplaced && l.pallet === here && lineMatchesCode(l, sourceLine.productNumber)
+  );
+
+  if (idx >= 0) {
+    const line = lines[idx];
+    line.checkedQty = Math.max(0, (line.checkedQty || 0) + amount);
+    line.checked = line.checkedQty > 0;
+    line.checkTime = line.checkedQty > 0 ? new Date().toLocaleDateString("sv-SE") : "";
+  } else {
+    lines.push({
+      productNumber: sourceLine.productNumber,
+      product: sourceLine.product,
+      gtin: sourceLine.gtin || "",
+      gtinInner: sourceLine.gtinInner || "",
+      picker: sourceLine.picker || "—",
+      pickedQty: 0,
+      pallet: here,
+      correctPallet: should,
+      location: sourceLine.location || "",
+      packageType: sourceLine.packageType || "",
+      checkedQty: Math.max(0, amount),
+      checked: amount > 0,
+      wrongProduct: false,
+      notOnPallet: true,
+      misplaced: true,
+      checkTime: amount > 0 ? new Date().toLocaleDateString("sv-SE") : ""
+    });
+    idx = lines.length - 1;
+  }
+
+  renderLines();
+  updateStats();
+  updateProgress();
+  state.activeIndex = idx;
+  state.verifyRow = false;
+  highlightActive();
+  scrollToRow(idx, "end");
+  banner("error", misplacedBanner(lines[idx], lines[idx].checkedQty), true);
+  beep("error");
+  refocusScan();
+  return false;
 }
 
 /* ---------- Rendering ---------- */
@@ -805,6 +926,7 @@ function renderOrderSiblings() {
 }
 
 function renderPallet() {
+  setDashboardVisible(false);
   document.getElementById("pallet-area").classList.remove("hidden");
   document.getElementById("pallet-number").textContent = state.pallet.sscc;
   document.getElementById("pallet-order").textContent = state.pallet.order ? formatOrderNo(state.pallet.order) : "";
@@ -830,26 +952,30 @@ function renderPallet() {
 
 function renderFilterBar() {
   const bar = document.getElementById("filter-bar");
-  
-  // Hämta alla unika pallar från produktraderna (A, B, C, D, E...)
-  const uniquePallets = [...new Set(state.pallet.lines.map(l => l.pallet))].sort();
-  
-  // Om bara en pall finns, visa ändå filtret men utan "Visa alla"
-  const filters = uniquePallets.length > 1 
-    ? [{ key: "ALL", label: "Visa alla" }, ...uniquePallets.map(p => ({ key: p, label: `${p}-pall` }))]
-    : uniquePallets.map(p => ({ key: p, label: `${p}-pall` }));
-  
+  const uniquePallets = orderPalletLetters();
+
+  // Visa alla = hela ordern samtidigt. A/B/C… = en pall i taget.
+  const filters = uniquePallets.length > 1
+    ? [{ key: "ALL", label: "Visa alla" }, ...uniquePallets.map((p) => ({ key: p, label: `${p}-pall` }))]
+    : uniquePallets.map((p) => ({ key: p, label: `${p}-pall` }));
+
   bar.innerHTML = "";
   filters.forEach((f) => {
     const b = document.createElement("button");
     b.className = "filter-btn" + (state.filter === f.key ? " active" : "");
     b.textContent = f.label;
-    b.addEventListener("click", () => { state.filter = f.key; renderLines(); updateProgress(); });
+    b.title = f.key === "ALL" ? "Kontrollera alla pallar på ordern samtidigt" : `Visa bara ${f.label}`;
+    b.addEventListener("click", () => {
+      state.filter = f.key;
+      renderFilterBar();
+      renderLines();
+      updateProgress();
+      updateStats();
+    });
     bar.appendChild(b);
   });
-  
-  // Om bara en pall, sätt filtret till den pallen
-  if (uniquePallets.length === 1 && state.filter === "ALL") {
+
+  if (uniquePallets.length === 1 && (state.filter === "ALL" || !uniquePallets.includes(state.filter))) {
     state.filter = uniquePallets[0];
   }
 }
@@ -861,7 +987,12 @@ function visibleLines() {
     .filter((x) => state.filter === "ALL" || x.line.pallet === state.filter);
   const unknownLines = state.pallet.lines
     .map((l, i) => ({ line: l, index: i }))
-    .filter((x) => x.line.notOnPallet);
+    .filter((x) => x.line.notOnPallet)
+    .filter((x) => {
+      if (state.filter === "ALL") return true;
+      const letter = x.line.pallet;
+      return !letter || letter === "—" || letter === state.filter;
+    });
   return [...palletLines, ...unknownLines];
 }
 
@@ -879,10 +1010,12 @@ function renderLines() {
     const tr = document.createElement("tr");
     tr.dataset.index = index;
     const wrongPallet = isWrongPallet(line);
+    const moved = isRegisteredMove(line);
     const hasError = lineHasError(line);
     const isUnknown = line.notOnPallet;
 
     if (isUnknown) tr.classList.add("unknown-product-row");
+    if (moved && !(line.checked && !hasError)) tr.classList.add("moved-row");
     if (line.checked && !hasError) tr.classList.add("ok-row");
     if (hasError) tr.classList.add("error-row");
 
@@ -891,25 +1024,26 @@ function renderLines() {
     if (line.misplaced) statusIcon = '<span class="status-error" title="Fel pall utan exchange">\u21C4</span>';
     else if (isUnknown) statusIcon = '<span class="status-error" title="Finns ej på pallen">\u2716</span>';
     else if (line.wrongProduct) statusIcon = '<span class="status-error" title="Fel produkt">\u2716</span>';
-    else if (wrongPallet) statusIcon = '<span class="status-error" title="Fel pall">\u21C4</span>';
+    else if (moved) statusIcon = '<span class="status-moved" title="Flyttad i Vardacco — samma butik">\u21C4</span>';
     else if (line.checked) {
       if (!hasError) statusIcon = '<span class="status-ok">\u2714</span>';
       else statusIcon = '<span class="status-error">\u26A0</span>';
     }
 
-    // Pall-cell: vid fel pall visas "plockad → ska", annars bara pallen
+    // Pall-cell: vid flytt visas "ligger → ska", men det är inte ett fel
     let palletPill = "";
     if (showPallet) {
       if (line.misplaced) {
         palletPill = `<span class="pill pill-${line.pallet}">${line.pallet}</span>` +
           ` <span class="pallet-arrow">\u2192</span> ` +
           `<span class="pill pill-${line.correctPallet}">${line.correctPallet}</span>`;
-      } else if (isUnknown) {
-        palletPill = '<span class="unknown-pallet-badge">EJ PÅ PALLEN</span>';
-      } else if (wrongPallet) {
+      } else if (moved) {
         palletPill = `<span class="pill pill-${line.pallet}">${line.pallet}</span>` +
           ` <span class="pallet-arrow">\u2192</span> ` +
-          `<span class="pill pill-${line.correctPallet}">${line.correctPallet}</span>`;
+          `<span class="pill pill-${line.correctPallet}">${line.correctPallet}</span>` +
+          ` <span class="move-hint">L\u00e4gg p\u00e5 ${line.correctPallet}</span>`;
+      } else if (isUnknown) {
+        palletPill = '<span class="unknown-pallet-badge">EJ PÅ PALLEN</span>';
       } else {
         palletPill = `<span class="pill pill-${line.pallet}">${line.pallet}</span>`;
       }
@@ -1058,7 +1192,7 @@ function applyQtyDeltaToLine(index, delta) {
   line.checked = newQty > 0;
   line.checkTime = newQty > 0 ? new Date().toLocaleDateString("sv-SE") : "";
 
-  if (newQty === line.pickedQty && !isWrongPallet(line)) {
+  if (newQty === line.pickedQty && !line.misplaced) {
     line.wrongProduct = false;
   }
   promoteLineToTop(index);
@@ -1184,7 +1318,6 @@ function updateStats() {
   const lines = state.pallet.lines;
   const wrongAmount = lines.filter(isWrongAmount);
   const wrongProduct = lines.filter((l) => l.wrongProduct && !l.notOnPallet);
-  const registeredWrongPallet = lines.filter((l) => isWrongPallet(l) && !l.misplaced && !l.notOnPallet);
   const misplacedLines = lines.filter((l) => l.misplaced);
   const unknownLines = lines.filter((l) => l.notOnPallet && !l.misplaced);
   const siblingLetters = [...new Set(
@@ -1209,14 +1342,12 @@ function updateStats() {
   }));
   html += statsGroup("Fel produkt", wrongProduct.map(
     (l) => `${l.productNumber} ${l.product}` + (state.pallet.twoPallets ? ` <span class="pill pill-${l.pallet}">${l.pallet}</span>` : "")));
-  html += statsGroup("Fel pall (exchange i Vardacco)", registeredWrongPallet.map(
-    (l) => `${l.productNumber} ${l.product} <strong>(ligger på <span class="pill pill-${l.pallet}">${l.pallet}</span> \u2192 ska på <span class="pill pill-${l.correctPallet}">${l.correctPallet}</span>) — Plats: ${l.location || "okänd"}</strong>`));
   html += statsGroup("Fel pall (ingen exchange)", misplacedLines.map(
     (l) => `${l.productNumber} ${l.product} <strong>ligger på <span class="pill pill-${l.pallet}">${l.pallet}</span> men ska till <span class="pill pill-${l.correctPallet}">${l.correctPallet}</span>-pallen — flytta ${l.checkedQty || 0} ${(l.packageType || "st")}</strong>`));
   html += statsGroup("Ska inte finnas med på pall", unknownLines.map(
     (l) => `${l.productNumber} <strong>Ska inte finnas med på pall</strong> (räknat ${l.checkedQty}) — Lämna tillbaka`));
 
-  if (!wrongAmount.length && !wrongProduct.length && !registeredWrongPallet.length && !misplacedLines.length && !unknownLines.length) {
+  if (!wrongAmount.length && !wrongProduct.length && !misplacedLines.length && !unknownLines.length) {
     html = '<div class="stats-empty">\u2714 Inga avvikelser</div>' + html;
   }
   document.getElementById("stats-content").innerHTML = html;
@@ -1236,18 +1367,18 @@ async function finishCheck() {
 
   // Finish Check går ALLTID igenom. Avvikelser (fel pall, fel antal, extra)
   // blockerar inte – de skickas vidare så ledarna ser dem i IMI.
-  const errors = state.pallet.lines.filter(lineHasError);
   const unknownLines = state.pallet.lines.filter((l) => l.notOnPallet && !l.misplaced);
-  const unchecked = state.pallet.lines.filter((l) => !l.notOnPallet && !l.checked).length;
-  const totalErrors = errors.length;
+  const totalErrors = state.pallet.lines.filter((l) => {
+    if (l.notOnPallet || l.misplaced) return true;
+    if (!l.checked) return true;
+    return lineHasError(l);
+  }).length;
 
-  if (totalErrors === 0 && unchecked === 0) {
+  if (totalErrors === 0) {
     banner("ok", "\u2714 Pall OK \u2013 inga avvikelser", false);
     beep("ok");
   } else {
-    let msg = `Pall klar med ${totalErrors} avvikelse(r)`;
-    if (unchecked > 0) msg += ` \u00b7 ${unchecked} ej kontrollerade`;
-    banner("error", msg, false);
+    banner("error", `Pall klar med ${totalErrors} avvikelse(r)`, false);
     beep("error");
   }
 
@@ -1277,7 +1408,7 @@ async function finishCheck() {
   if (state.pallet.lastCheckId) {
     checkPayload.checkId = state.pallet.lastCheckId;
   }
-  saveCheckToServer(checkPayload);
+  await saveCheckToServer(checkPayload);
 
   // Återställ för nästa pall (snabbflöde)
   setTimeout(() => {
@@ -1286,6 +1417,7 @@ async function finishCheck() {
     state.sscc = null;
     state.checkStartTime = null;
     document.getElementById("sscc-input").value = "";
+    setDashboardVisible(true);
     focusSscc();
   }, 1200);
 }
@@ -1335,11 +1467,22 @@ function getCheckerUsername() {
 
 async function saveCheckToServer(data) {
   try {
-    await fetch(`${API_BASE}/check`, {
+    const res = await fetch(`${API_BASE}/check`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data)
     });
+    if (res.ok) {
+      const out = await res.json();
+      if (out.checkId) {
+        if (state.pallet && state.pallet.sscc === data.sscc) {
+          state.pallet.lastCheckId = out.checkId;
+        }
+        if (state.finished[data.sscc]) {
+          state.finished[data.sscc].lastCheckId = out.checkId;
+        }
+      }
+    }
   } catch (err) {
     console.error("Kunde inte spara check till server:", err);
   }
